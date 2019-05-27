@@ -1,0 +1,7 @@
+## Ignore File ##
+
+*.o
+server_exe
+client
+*.out
+*.cpp
