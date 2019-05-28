@@ -161,8 +161,7 @@ void fetchfieldbyFN(int FieldNumber, char *buffer, int len)
 
 // 필드 이름으로 값 조회, fetchRow로 받아온 Row의 개별 field값을 buffer에 담음
 void fetchfieldbyName(const char *name, char *buffer, int len)
-{ |                |
-+--------+-------------+------+-----+--------
+{
         MYSQL_FIELD *fields;
         int num_fields; // 쿼리로 얻어온 필드 수
         int i;
