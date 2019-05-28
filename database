@@ -1,0 +1,223 @@
+#include <mysql/mysql.h>
+#include <stdio.h>
+#include <string.h>
+MYSQL_RES *sql_result;
+MYSQL_ROW sql_row;
+MYSQL *conn;
+
+#define TRUE 1
+#define FALSE 0
+
+typedef struct profile {
+	char id[16];
+	int win;
+	int lose;
+	int kill;
+	int death;
+} profile;
+
+typedef struct room {
+int rid;
+int ucount;
+char hname[16];
+} room;
+
+int rcnt = 0; // roomcount 방 개수를 의미
+
+int     runQuery(char *query); // 쿼리 실행
+int     fetchRow(void); //로우 조회 , sql_result에 query로 받은 row들을 실행때마다 차례대로 받아옴
+int     connectDB(void);
+void    closeDB(void);
+void    errorMsg(char *errMsg); // 에러메시지 출력
+void	joinMembership(char *id, char *pwd); // 회원가입
+int		compareID(char *id, char *pwd, profile *Upf); // ID, PWD를 비교한다. TRUE면 일치, FALSE면 일치하는 정보가 없다(틀리는것도 해당)
+
+void	createRoom(room Room); // 방 생성시 rcnt와 list 추가
+void	bringRoomList(); // 방 목록을 가져온다.
+void	updateRoom(); // 생성된 방에 참여/퇴장시 인원 변경
+void	deleteRoom(); // 방 삭제시 rcnt를 낮추고 list에서 제외한다.
+
+void    fetchfieldbyFN(int FieldNumber, char *buffer, int len); // 테스트 코드에 있던것 삭제 예정
+void    fetchfieldbyName(const char *name, char *buffer, int len); // 테스트 코드에 있던것 삭제 예정
+
+// compareID에서 pwd 전달만 빼면 다른 플레이어 정보보기로 사용가능
+
+int main() {
+        int rt = 0;
+
+		/*클라로 부터 받아오는 데이터들을 임시로 지정 */
+		char user_id[16] = "darrrkk";
+		char user_pwd[20] = "foradun";
+		room Room = {1,1, "darrrkk"};// 방 생성할때 받는 데이터
+		//받아오는 데이터들 끝
+
+		profile user_profile;
+		memset(user_profile.id, 0, sizeof(user_profile.id));
+
+        if (connectDB() < 0) {
+                return -1;
+        }
+
+		/*회원가입 joinMembership(user_id, user_pwd);
+        if(compareID(user_id, user_pwd, &user_profile))
+		{
+			// compareID 에서 받아온 정보 출력
+			printf("%s %d %d %d %d \n", user_profile.id, user_profile.win, user_profile.lose, user_profile.kill, user_profile.death);
+		} */
+
+		createRoom(Room);
+
+        closeDB();
+
+        return 0;
+}
+
+//유저 회원가입을 시킴
+void joinMembership(char *id, char *pwd)
+{
+	char query[255] = {0}; // 임시로 담을 버퍼
+	snprintf(query, 255,"insert into Userinfo values('%s', '%s', '0', '0', '0', '0')", id, pwd);
+	runQuery(query);
+}
+
+int compareID(char *id, char *pwd, profile *Upf) // ID, PWD를 비교한다. TRUE면 일치, FALSE면 일치하는 정보가 없다(틀리는것도 해당)
+{
+	runQuery("Select * from Userinfo"); // 비교대상을 가져옴
+
+	while(fetchRow()) // 검사 진행
+	{
+		if ((!strcmp(sql_row[0],id))&&(!strcmp(sql_row[1],pwd))) { // 유저의 id,pwd가 일치하는 상황
+			//유저의 정보를 보내기위해 불러온 값을 저장한다.
+			strncpy(Upf->id, sql_row[0], sizeof(Upf->id));
+			Upf->win = atoi(sql_row[2]);
+			Upf->lose = atoi(sql_row[3]);
+			Upf->kill = atoi(sql_row[4]);
+			Upf->death = atoi(sql_row[5]);
+
+			return TRUE;
+		}
+		else
+			continue;
+	}
+	return FALSE;
+}
+
+// 방 생성시 rcnt와 list 추가
+void createRoom(room Room)
+{
+	char query[255] = {0}; // 임시로 담을 버퍼
+	snprintf(query, 255,"insert into RoomList values('%d', '%d', '%s')", Room.rid, Room.ucount, Room.hname);
+	runQuery(query);
+	rcnt++; // 방 개수 하나 증가
+}
+
+// 방 목록을 가져온다.
+void bringRoomList()
+{
+	int i;
+	runQuery("Select * from RoomList"); // 방 목록 가져옴
+
+	for(i = 0; i < rcnt; i++)
+		fetchRow();
+
+}
+
+// 쿼리 실행
+int runQuery(char *query)
+{
+        if(mysql_query(conn, query)) {
+                errorMsg("MySQL Query Excute failed");
+                return -1;
+        }
+
+        sql_result = mysql_store_result(conn);
+        return 0;
+}
+
+//로우 조회 , sql_result에 query로 받은 row들을 실행때마다 차례대로 받아옴
+int fetchRow(void)
+{
+        if(sql_result) {
+                sql_row = mysql_fetch_row(sql_result);
+                if(!sql_row) {
+                        errorMsg("MySQL Fetch failed");
+                        return -1;
+                }
+                return 1;
+        }
+        errorMsg("MySQL Query Result Null");
+        return -2;
+}
+
+//로우 아이디별로 값 조회, fetchRow로 받아온 Row의 개별 field값을 buffer에 담음
+void fetchfieldbyFN(int FieldNumber, char *buffer, int len)
+{
+        if(sql_row[FieldNumber]) {
+                strncpy(buffer, sql_row[FieldNumber], len);
+        } else {
+                errorMsg("MySQL Query Result Null");
+        }
+}
+
+// 필드 이름으로 값 조회, fetchRow로 받아온 Row의 개별 field값을 buffer에 담음
+void fetchfieldbyName(const char *name, char *buffer, int len)
+{ |                |
++--------+-------------+------+-----+--------
+        MYSQL_FIELD *fields;
+        int num_fields; // 쿼리로 얻어온 필드 수
+        int i;
+
+        if(sql_result) {
+              num_fields = mysql_num_fields(sql_result);
+              fields = mysql_fetch_fields(sql_result);
+			// fields[i].name = 필드 이름, 지금의 경우 0 = id, 1 = pwd 이다.
+              for(i = 0; i < num_fields; i++) {
+                      if(!strcmp(fields[i].name, name)) {
+                              if(sql_row[i]) {
+                                  strncpy(buffer, sql_row[i], len);
+                                  return;
+                              }
+                      }
+              }
+
+        }
+		else {
+                errorMsg("MySQL Query Result Null");
+        }
+}
+
+// 디비 연결
+int connectDB(void)
+{
+        char *server = "localhost";
+        char *user = "root";
+        char *password = "1234";
+        char *database = "darktemplar";
+
+        conn = mysql_init(NULL);
+        if (conn == NULL) {
+                errorMsg("MySQL init fail");
+                return -1;
+        }
+        if(!mysql_real_connect(conn, server,
+           user, password, database, 0, NULL, 0)) {
+                errorMsg("MySQL connect fail");
+                return -2;
+        }
+        return 0;
+
+}
+
+// 디비 연결 해제
+void closeDB(void)
+{
+        if (sql_result)
+                mysql_free_result(sql_result);
+        mysql_close(conn);
+}
+
+void errorMsg(char *errMsg)
+{
+        printf("%s\n",errMsg);
+        fprintf(stderr, "Error Meassage : %s \n", mysql_error(conn));
+}
