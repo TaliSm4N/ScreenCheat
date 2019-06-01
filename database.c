@@ -4,7 +4,7 @@ MYSQL_RES *sql_result;
 MYSQL_ROW sql_row;
 MYSQL *conn;
 
-// Äõ¸® ½ÇÇà
+// ì¿¼ë¦¬ ì‹¤í–‰
 int runQuery(char *query)
 {
         if(mysql_query(conn, query)) {
@@ -16,7 +16,7 @@ int runQuery(char *query)
         return 0;
 }
 
-//·Î¿ì Á¶È¸ , sql_result¿¡ query·Î ¹ŞÀº rowµéÀ» ½ÇÇà¶§¸¶´Ù Â÷·Ê´ë·Î ¹Ş¾Æ¿È
+//ë¡œìš° ì¡°íšŒ , sql_resultì— queryë¡œ ë°›ì€ rowë“¤ì„ ì‹¤í–‰ë•Œë§ˆë‹¤ ì°¨ë¡€ëŒ€ë¡œ ë°›ì•„ì˜´
 int fetchRow(void)
 {
         if(sql_result) {
@@ -31,7 +31,7 @@ int fetchRow(void)
         return -2;
 }
 
-// µğºñ ¿¬°á
+// ë””ë¹„ ì—°ê²°
 int connectDB(void)
 {
         char *server = "localhost";
@@ -53,7 +53,7 @@ int connectDB(void)
 
 }
 
-// µğºñ ¿¬°á ÇØÁ¦
+// ë””ë¹„ ì—°ê²° í•´ì œ
 void closeDB(void)
 {
         if (sql_result)
@@ -61,16 +61,16 @@ void closeDB(void)
         mysql_close(conn);
 }
 
-//À¯Àú È¸¿ø°¡ÀÔÀ» ½ÃÅ´, sid´Â ÀÚµ¿À¸·Î 0ºÎÅÍ 1¾¿ Ãß°¡µÈ´Ù, À¯ÀúÀÇ ¼öµµ ´Ã¾î³²
+//ìœ ì € íšŒì›ê°€ì…ì„ ì‹œí‚´, sidëŠ” ìë™ìœ¼ë¡œ 0ë¶€í„° 1ì”© ì¶”ê°€ëœë‹¤, ìœ ì €ì˜ ìˆ˜ë„ ëŠ˜ì–´ë‚¨
 void joinMembership(char *id, char *pwd)
 {
     int ucnt;
-	char query[255] = {0}; // ÀÓ½Ã·Î ´ãÀ» ¹öÆÛ
+	char query[255] = {0}; // ì„ì‹œë¡œ ë‹´ì„ ë²„í¼
 	runQuery("Select * from Ucount");
 	fetchRow();
-    ucnt = atoi(sql_row[0]) + 1; // À¯Àú ¼ö ÇÏ³ª Ãß°¡
+    ucnt = atoi(sql_row[0]) + 1; // ìœ ì € ìˆ˜ í•˜ë‚˜ ì¶”ê°€
     snprintf(query, 255, "update Ucount SET ucnt = %d",ucnt);
-    runQuery(query); // °»½Å
+    runQuery(query); // ê°±ì‹ 
 
     memset(query, 0, sizeof(query));
 	snprintf(query, 255,"insert into Userinfo (id, pwd, win, lose, u_kill, u_death) values('%s', '%s', '0', '0', '0', '0')", id, pwd);
@@ -79,23 +79,23 @@ void joinMembership(char *id, char *pwd)
 	if (sql_result)
                 mysql_free_result(sql_result);
 
-    printf("good\n");
+    printf("join Success\n");
 }
 
-int compareID(char *id, char *pwd,struct profile *Upf,int * sid) // ID, PWD¸¦ ºñ±³ÇÑ´Ù. TRUE¸é ÀÏÄ¡, FALSE¸é ÀÏÄ¡ÇÏ´Â Á¤º¸°¡ ¾ø´Ù(Æ²¸®´Â°Íµµ ÇØ´ç)
-{ // ucnt´Â ´Ü¼øÈ÷ ¹İº¹¹® ¼öÇàÀ» À§ÇØ¼­ À¯Àú ¼ö¸¦ Ã¼Å©ÇÏ´Â º¯¼ö
+int compareID(char *id, char *pwd,struct profile *Upf,int * sid) // ID, PWDë¥¼ ë¹„êµí•œë‹¤. TRUEë©´ ì¼ì¹˜, FALSEë©´ ì¼ì¹˜í•˜ëŠ” ì •ë³´ê°€ ì—†ë‹¤(í‹€ë¦¬ëŠ”ê²ƒë„ í•´ë‹¹)
+{ // ucntëŠ” ë‹¨ìˆœíˆ ë°˜ë³µë¬¸ ìˆ˜í–‰ì„ ìœ„í•´ì„œ ìœ ì € ìˆ˜ë¥¼ ì²´í¬í•˜ëŠ” ë³€ìˆ˜
     runQuery("Select * from Ucount");
 	fetchRow();
     int ucnt = atoi(sql_row[0]);
     printf("ucnt = %d \n", ucnt);
-	runQuery("Select * from Userinfo"); // ºñ±³´ë»óÀ» °¡Á®¿È
+	runQuery("Select * from Userinfo"); // ë¹„êµëŒ€ìƒì„ ê°€ì ¸ì˜´
 
 
 	for(int i=0; i < ucnt; i++)
 	{
-	    fetchRow(); // °Ë»ç ÁøÇà
-		if ((!strcmp(sql_row[1],id))&&(!strcmp(sql_row[2],pwd))) { // À¯ÀúÀÇ id,pwd°¡ ÀÏÄ¡ÇÏ´Â »óÈ²
-			//À¯ÀúÀÇ Á¤º¸¸¦ º¸³»±âÀ§ÇØ ºÒ·¯¿Â °ªÀ» ÀúÀåÇÑ´Ù.
+	    fetchRow(); // ê²€ì‚¬ ì§„í–‰
+		if ((!strcmp(sql_row[1],id))&&(!strcmp(sql_row[2],pwd))) { // ìœ ì €ì˜ id,pwdê°€ ì¼ì¹˜í•˜ëŠ” ìƒí™©
+			//ìœ ì €ì˜ ì •ë³´ë¥¼ ë³´ë‚´ê¸°ìœ„í•´ ë¶ˆëŸ¬ì˜¨ ê°’ì„ ì €ì¥í•œë‹¤.
 			*sid = atoi(sql_row[0]);
 			strncpy(Upf->id, sql_row[1], sizeof(Upf->id));
 			Upf->win = atoi(sql_row[3]);
@@ -113,20 +113,20 @@ int compareID(char *id, char *pwd,struct profile *Upf,int * sid) // ID, PWD¸¦ ºñ
 	return 0;
 }
 
-// ¹æ »ı¼º½Ã rcnt¿Í list Ãß°¡
+// ë°© ìƒì„±ì‹œ rcntì™€ list ì¶”ê°€
 void createRoom(struct room Room)
 {
-	char query[255] = {0}; // ÀÓ½Ã·Î ´ãÀ» ¹öÆÛ
+	char query[255] = {0}; // ì„ì‹œë¡œ ë‹´ì„ ë²„í¼
 	snprintf(query, 255,"insert into RoomList values('%d', '%d', '%s')", Room.rid, Room.ucount, Room.hname);
 	runQuery(query);
-	//rcnt++; // ¹æ °³¼ö ÇÏ³ª Áõ°¡
+	//rcnt++; // ë°© ê°œìˆ˜ í•˜ë‚˜ ì¦ê°€
 }
 
-// ¹æ ¸ñ·ÏÀ» °¡Á®¿Â´Ù.
+// ë°© ëª©ë¡ì„ ê°€ì ¸ì˜¨ë‹¤.
 void bringRoomList()
 {
 	int i;
-	runQuery("Select * from RoomList"); // ¹æ ¸ñ·Ï °¡Á®¿È
+	runQuery("Select * from RoomList"); // ë°© ëª©ë¡ ê°€ì ¸ì˜´
 
 	//for(i = 0; i < rcnt; i++)
 		//fetchRow();
