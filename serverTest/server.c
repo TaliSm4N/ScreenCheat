@@ -1,6 +1,6 @@
 #include "server.h"
 
-//listening socke setting
+//listening socket setting
 int setListening(char *port)
 {
 	int sock;
@@ -11,7 +11,7 @@ int setListening(char *port)
 
 	if(port==NULL)
 		return -1;
-	
+
 	sock=socket(PF_INET,SOCK_STREAM,0);
 
 	if(sock==-1)
@@ -50,18 +50,18 @@ int setEpoll(int sock)
 	eData=(struct eventData *)malloc(sizeof(struct eventData)*1);
 
 	Log("epoll setting");
-	
+
 	//socket setting
 	event.events = EPOLLIN;
 	eData->fd=sock;
 	eData->state=0;
 	event.data.ptr = (void *)eData;
 
-	epoll_ctl(epfd, EPOLL_CTL_ADD, sock, &event);
+	epoll_ctl(epfd, EPOLL_CTL_ADD, sock, &event); // 관심대상 추가
 
 	Log("epoll setting success");
 	LogNum("epoll fd",epfd);
-	
+
 
 	return epfd;
 }
@@ -81,11 +81,11 @@ int connectClient(int sock,int epfd)
 	clnt_sock=accept(sock,(struct sockaddr*)&clnt_adr,&adr_sz);
 	event.events=EPOLLIN;
 	eData->fd=clnt_sock;
-	eData->state=0;
+	eData->state=0; //어떤 모듈에 있는지 0 Login 모듈 1대기실 모듈 2 방모듈 3 인게임
 	event.data.ptr=(void *)eData;
 
 	epoll_ctl(epfd,EPOLL_CTL_ADD,clnt_sock,&event);
-	
+
 	Log("client connect");
 	LogNum("client fd",clnt_sock);
 
@@ -95,24 +95,10 @@ int connectClient(int sock,int epfd)
 //login module msg처리
 int login(int fd)
 {
-	int str_len; 
-
+	int str_len;
 	struct loginMsg loginMsg;
 	struct loginRequest *request;
 	struct loginAuth auth;
-
-
-	//test code
-	//----------------------
-	struct profile testID;//실험용 데이터 셋
-	char pwd[20]="testpwd";
-
-	strcpy(testID.id,"testid");//="testid";
-	testID.win=10;
-	testID.lose=8;
-	testID.kill=32;
-	testID.death=22;
-	//-----------------------
 
 	Log("Login module");
 	LogNum("fd",fd);
@@ -133,28 +119,28 @@ int login(int fd)
 
 			auth.msg_code=110;
 
-			if(strcmp(request->id,testID.id)==0&&strcmp(request->pwd,pwd)==0)
+			if (compareID (request->id, request->pwd, &auth.profile, &auth.sid))
 			{
-				auth.sid=1;
-				strcpy(auth.profile.id,testID.id);
-				auth.profile.win=testID.win;
-				auth.profile.lose=testID.lose;
-				auth.profile.kill=testID.kill;
-				auth.profile.death=testID.death;
-
 				Log("success Login");
-				Log(request->id);
-				
+				write(fd,&auth,sizeof(struct loginAuth)); // 로그인에 성공한 클라이언트 정보 전송
 			}
-			else
-			{
-				auth.sid=-1;
-
+			
+			else {
 				Log("failed Login");
+				write(fd,&auth.sid,sizeof(int)); // 실패 했으므로 sid -1 전송
 			}
-			write(fd,&auth,sizeof(struct loginAuth));
+			
+			break;
+
+		case 101: // 회원가입 요청
+			Log("request joinMembership");
+			request=(struct loginRequest *)&loginMsg;
+			auth.msg_code=111;
+			
+			joinMembership(request->id, request->pwd);
 			break;
 	}
+
 
 	return 0;
 }
@@ -173,7 +159,7 @@ int server(char *port)
 
 	sock=setListening(port);//3
 	epfd=setEpoll(sock);//4
-
+	connectDB();
 	Log("server");
 
 	while(1)
@@ -191,16 +177,18 @@ int server(char *port)
 		{
 			if(eFD==sock)
 			{
-				connectClient(sock,epfd);
+				connectClient(sock,epfd); //클라이언트 소켓 생성
 			}
 			else if(eState==0)//로그인 모듈일 때
 			{
 				login(eFD);
+				
 			}
 		}
-		
+	//	break;
 	}
-
+	
+	closeDB();
 	close(epfd);
 
 	return 0;
