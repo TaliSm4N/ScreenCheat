@@ -127,7 +127,7 @@ int login(int fd)
 			
 			else {
 				Log("failed Login");
-				write(fd,&auth.sid,sizeof(int)); // 실패 했으므로 sid -1 전송
+				write(fd,&auth,sizeof(struct loginAuth)); // 실패 했으므로 sid -1 전송
 			}
 			
 			break;
