@@ -52,8 +52,8 @@ int main(int argc,char *argv[])
 	write(sock,&loginMsg,sizeof(struct loginRequest));
 
 	printf("send msg \n");
+	
 	while(str_len==0)
-		
 	str_len=read(sock,&auth,sizeof(struct loginAuth));
 	
 	printf("auth.sid = %d\n", auth.sid);
