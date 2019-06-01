@@ -54,8 +54,8 @@ int main(int argc,char *argv[])
 	printf("send msg \n");
 	while(str_len==0)
 		
-	//	str_len=read(sock,&auth,sizeof(struct loginAuth));
-	str_len=read(sock,&auth.sid,sizeof(int));
+	str_len=read(sock,&auth,sizeof(struct loginAuth));
+	
 	printf("auth.sid = %d\n", auth.sid);
 	printf("str_len : %d\n",str_len);
 
