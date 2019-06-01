@@ -17,7 +17,7 @@ int main(int argc,char *argv[])
 
 	struct loginAuth auth;
 
-	loginMsg.msg_code=100;
+
 
 	if(argc!=3)
 	{
@@ -42,7 +42,8 @@ int main(int argc,char *argv[])
 		fprintf(stderr,"connect erorr\n");
 		exit(1);
 	}
-
+	fputs("join: 101, login: 100 \n", stdout);
+	scanf("%d", &loginMsg.msg_code);
 	fputs("id: ",stdout);
 	scanf("%s",loginMsg.id);
 	fputs("passward: ",stdout);
@@ -50,11 +51,13 @@ int main(int argc,char *argv[])
 
 	write(sock,&loginMsg,sizeof(struct loginRequest));
 
-	printf("send msg");
+	printf("send msg \n");
 	while(str_len==0)
-		str_len=read(sock,&auth,sizeof(struct loginAuth));
-
-	printf("%d\n",str_len);
+		
+	//	str_len=read(sock,&auth,sizeof(struct loginAuth));
+	str_len=read(sock,&auth.sid,sizeof(int));
+	printf("auth.sid = %d\n", auth.sid);
+	printf("str_len : %d\n",str_len);
 
 	if(auth.sid==-1)
 	{
@@ -63,12 +66,15 @@ int main(int argc,char *argv[])
 	else
 	{
 		printf("login success\n");
+		printf("sid : %d\n", auth.sid);
 		printf("ID : %s\n",auth.profile.id);
 		printf("win/lose : %d/%d\n",auth.profile.win,auth.profile.lose);
 		printf("kill/death : %d/%d\n",auth.profile.kill,auth.profile.death);
 	}
-
+	
+	
 	while(1);
+	close(sock);
 
 	return 0;
 }
