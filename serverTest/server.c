@@ -1,26 +1,26 @@
 #include "server.h"
 
-void Signal_Init(void) // 시그널 처리 함수, 종료되는 시그널이 발생한 경우 클라이언트의 소켓을 회수하고, epoll을 해제한다
+/*void Signal_Init(void) // 시그널 처리 함수, 종료되는 시그널이 발생한 경우 클라이언트의 소켓을 회수하고, epoll을 해제한다
 {
 	struct sigaction act_ignore1;
 	struct sigaction act_ignore2;
 	memset(&act_ignore1, 0x00, sizeof(struct sigaction));
 	memset(&act_ignore2, 0x00, sizeof(struct sigaction));
-	
+
 	act_ignore1.sa_handler = closeClient(epfd, eFD);
 	sigemptyset(&(act_ignore1.sa_mask));
 	act_ignore1.sa_flags = 0;
-	
+
 	act_ignore2.sa_handler = closeClient(epfd, eFD);
 	sigemptyset(&(act_ignore2.sa_mask));
 	act_ignore2.sa_flags = 0;
-	
+
 	sigaction(SIGPIPE, &act_ignore1, NULL);
 	sigaction(SIGINT, &act_ignore2, NULL); //Ctrl-C
-	
-	
-	
-}
+
+
+
+}*/
 
 //SIGPIPE 처리
 /*void sigpipeIgnore(int signo)
@@ -37,6 +37,7 @@ void Signal_Init(void) // 시그널 처리 함수, 종료되는 시그널이 발
 	Log("sigint Ignored");
 }*/
 
+// 비동기 소켓으로 설정
 void setnonblockingmode(int fd)
 {
 	int flag = fcntl(fd, F_GETFL, 0);
@@ -48,7 +49,7 @@ int setListening(char *port)
 {
 	int sock;
 	struct sockaddr_in serv_adr;
-	
+
 	Log("setListening socket");
 	LogNum("port",atoi(port));
 
@@ -97,7 +98,7 @@ int setEpoll(int sock)
 	//socket setting
 	setnonblockingmode(sock); // 비동기화
 	event.events = EPOLLIN;
-	eData->fd=sock; 
+	eData->fd=sock;
 	eData->state=0;
 	event.data.ptr = (void *)eData;
 
@@ -126,7 +127,7 @@ int connectClient(int sock,int epfd)
 	setnonblockingmode(clnt_sock);
 	event.events=EPOLLIN|EPOLLET;
 	eData->fd=clnt_sock;
-	eData->state=0; //어떤 모듈에 있는지 0 Login 모듈 1대기실 모듈 2 방모듈 3 인게임 4 종료 
+	eData->state=0; //어떤 모듈에 있는지 0 Login 모듈 1대기실 모듈 2 방모듈 3 인게임 4 종료
 	event.data.ptr=(void *)eData;
 
 	epoll_ctl(epfd,EPOLL_CTL_ADD,clnt_sock,&event);
@@ -145,7 +146,7 @@ int closeClient(int epfd,int fd)
 }
 
 //login module msg처리
-int login(int fd)
+int login(int epfd ,int fd)
 {
 	int str_len;
 	struct loginMsg loginMsg;
@@ -155,7 +156,7 @@ int login(int fd)
 	Log("Login module");
 	LogNum("fd",fd);
 
-	str_len=read(fd,&loginMsg,sizeof(struct loginMsg));
+	str_len=read(fd,&loginMsg,sizeof(struct loginMsg)); // 로그인 단계 메시지를 받음
 
 
 
@@ -176,29 +177,33 @@ int login(int fd)
 				Log("success Login");
 				write(fd,&auth,sizeof(struct loginAuth)); // 로그인에 성공한 클라이언트 정보 전송
 			}
-			
+
 			else {
 				Log("failed Login");
 				write(fd,&auth,sizeof(struct loginAuth)); // 실패 했으므로 sid -1 전송
 			}
-			
+
 			break;
 
 		case 101: // 회원가입 요청
 			Log("request joinMembership");
 			request=(struct loginRequest *)&loginMsg;
 			auth.msg_code=111;
-			
+
 			joinMembership(request->id, request->pwd);
 			write(fd,&auth,sizeof(struct loginAuth)); // 회원가입 확인용 블록을 막기위해서 전송한다.
 			break;
-			
+
+		case 102: // 대기실 상태로 전환한다.
+			Log("request change to Lobby");
+			break;
+
 		case 501: // 게임 종료 요청, eState를 4로 바꿔야함
 			Log("request Quit Game");
 			break;
 	}
 
-
+	closeClient(epfd, fd);
 	return 0;
 }
 
@@ -213,8 +218,8 @@ int server(char *port)
 	int event_cnt;
 	struct epoll_event	*ep_events=(struct epoll_event *)malloc(sizeof(struct epoll_event)*EPOLL_SIZE);
 
-	Signal_Init();
-	
+	//Signal_Init();
+
 	sock=setListening(port);//3
 	epfd=setEpoll(sock);//4
 	connectDB();
@@ -239,10 +244,9 @@ int server(char *port)
 			}
 			else if(eState == 0)//로그인 모듈일 때
 			{
-				login(eFD);
-				
+				login(epfd, eFD);
 			}
-			
+
 			else if(eState == 4) // 종료 요청
 			{
 				closeClient(epfd, eFD);
@@ -250,7 +254,7 @@ int server(char *port)
 		}
 	//	break;
 	}
-	
+
 	closeDB();
 	close(epfd);
 
