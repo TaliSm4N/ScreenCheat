@@ -1,12 +1,13 @@
 #include "server.h"
 
 //SIGINT 처리
-void sigInt_handler (void) 
+void sigInt_handler (void)
 {
 	struct sigaction act_ignore;
 	memset(&act_ignore, 0x00, sizeof(struct sigaction));
 
-	act_ignore.sa_handler = Log("SIGINT ignore");
+	Log("SIGINT ignore");
+	act_ignore.sa_handler = SIG_IGN;
 	sigemptyset(&(act_ignore.sa_mask));
 	act_ignore.sa_flags = 0;
 
@@ -17,16 +18,17 @@ void sigInt_handler (void)
 //SIGPIPE 처리, 종료되는 시그널이 발생한 경우 클라이언트의 소켓을 회수하고, epoll을 해제한다
 void sigPipe_handler(int epfd, int fd)
 {
-	struct sigaction act_ignore;
-	memset(&act_ignore, 0x00, sizeof(struct sigaction));
-	
-	Log("SIGPIPE has occured!");
-	act_ignore.sa_handler = closeClient(epfd, fd);
-	sigemptyset(&(act_ignore.sa_mask));
-	act_ignore.sa_flags = 0;
-	
-	sigaction(SIGPIPE, &act_ignore, NULL);
-} 
+	struct sigaction act_ignore2;
+	memset(&act_ignore2, 0x00, sizeof(struct sigaction));
+
+	//Log("SIGPIPE has occured!");
+	act_ignore2.sa_handler = SIG_IGN;
+	sigemptyset(&(act_ignore2.sa_mask));
+	act_ignore2.sa_flags = 0;
+
+	sigaction(SIGPIPE, &act_ignore2, NULL);
+	//closeClient(epfd, fd);
+}
 
 
 // 비동기 소켓으로 설정
@@ -130,7 +132,7 @@ int connectClient(int sock,int epfd)
 	return clnt_sock;
 }
 //클라이언트 소켓을 닫고 epoll을 해제한다, SIGINT 발생 시에도 동일하게 처리
-int closeClient(int epfd,int fd)
+void closeClient(int epfd,int fd)
 {
 	LogNum("Closed Client Socket", fd);
 	epoll_ctl(epfd,EPOLL_CTL_DEL,fd,NULL); // epoll 관리 대상에서 제외
@@ -148,7 +150,7 @@ int login(int epfd ,int fd)
 	Log("Login module");
 	LogNum("fd",fd);
 	sigPipe_handler(epfd,fd);
-	
+
 	str_len=read(fd,&loginMsg,sizeof(struct loginMsg)); // 로그인 단계 메시지를 받음
 
 
@@ -182,32 +184,39 @@ int login(int epfd ,int fd)
 			Log("request joinMembership");
 			request=(struct loginRequest *)&loginMsg;
 			auth.msg_code=111;
-			joinMembership(request->id, request->pwd);
-			/*
+		//	joinMembership(request->id, request->pwd);
+
 			if (joinMembership(request->id, request->pwd)) // 회원가입에 성공함
 			{
 				auth.msg_code=111;
 			}
-			
+
 			else { //회원가입에 실패함
+				printf("fuck\n");
 				auth.msg_code=113;
-			} */
-			
+			}
+
 			write(fd,&auth,sizeof(struct loginAuth)); // 회원가입 확인용 블록을 막기위해서 전송한다.
 			break;
 
 		case 102: // 대기실 상태로 전환한다.
 			Log("request change to Lobby");
+			auth.msg_code=112;
+			
+			write(fd,&auth,sizeof(struct loginAuth));
 			return 1;
 		//	break;
-		
-		case 501: // 게임 종료 요청, eState를 4로 바꿔야함
+
+		case 500: // 게임 종료 요청, eState를 4로 바꿔야함
 			Log("request Quit Game");
+			auth.msg_code=510;
+			
+			write(fd,&auth,sizeof(struct loginAuth));
 			closeClient(epfd, fd);
 			break;
 	}
 
-	
+	closeClient(epfd, fd);
 	return 0; // eState = 0 으로 로그인 다시 진행
 }
 
