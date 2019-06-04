@@ -40,6 +40,15 @@ struct loginAuth
 	struct profile profile;
 };
 
+// 방 
+struct room
+{
+	int rid;
+
+	int ucount;
+	char hname[16];
+};
+
 #endif
 
 
