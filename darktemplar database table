@@ -1,9 +1,12 @@
-﻿#는 mysql에서 주석처리 
+﻿방 목록 테이블까지 쭉 복사
+#는 mysql에서 주석처리 
+
 mysql -u root -p #root로 mysql시작
 create database darktemplar  #default CHARACTER SET UTF8 까지 쓰면 한글 허용
 use darktemplar; #database 사용
 
 계정 정보 테이블 
+
 create table Userinfo (
 uid int not null primary key auto_increment,
 id varchar(16) not null unique,   #nvarchar로 할 경우 한글 저장이 가능하다, 대신 2바이트씩 먹음, id는 겹치지 않는다.
@@ -15,11 +18,13 @@ u_death int not null default 0 # kill이랑 맞춤
 ); 
 
 유저,방 수 테이블
+
 Create table count ( 
 ucnt int not null default 0,
 rcnt int not null default 0);
 
 방 목록 테이블 – 호스트명, 방 내부 인원 수, 방 번호
+
 create table RoomList (
 rid int not null primary key, # 방 번호, 안 겹쳐야 함
 ucount int not null default 1,
@@ -32,6 +37,14 @@ guest2fd int default 0 unique, # guest2의 fd, 겹칠 수 없다
 guest3fd int default 0 unique, # guest3의 fd, 겹칠 수 없다
 guest4fd int default 0 unique # guest4의 fd, 겹칠 수 없다
 );
+
+insert into count values('0',’0’); <- ‘ ‘ 부분 복사하면 오류나서 ‘는 직접 쳐줘야함
+
+-------------------------------------------여기까지 복사해줘야 오류 안남-----------------------------
+select * from Userinfo # Userinfo 테이블 확인;
+select * from count; # count 테이블 확인
+select * from RoomList; #RoomList 테이블 확인
+
 아이템 정보 테이블 – 수량, 종류, 코드
 create table item (
 itemCount int not null, # 아이템 수량, 필요 없을 수 있음
@@ -39,15 +52,12 @@ MapitemCount int not null, # 맵에 있는 동일한 아이템 수량, 필요 �
 icode int not null,
 item varchar(10) not null,
 
-
 Auto_increment 초기화하기
 alter table <테이블 이름> auto_increment=<초기화값>; 
 Alter table Userinfo auto_increment = 0;
 
-insert into Ucount values('0');
-
-update Ucount set ucnt = 0; # ucnt 필드의 모든 값들을 0으로 바꿈
-update Ucount set rcnt = 0; # rcnt 필드의 모든 값들을 0으로 바꿈
+update count set ucnt = 0; # ucnt 필드의 모든 값들을 0으로 바꿈
+update count set rcnt = 0; # rcnt 필드의 모든 값들을 0으로 바꿈
 
 Insert into Userinfo (id,pwd,win,lose,u_kill,u_death) values(‘forum’, ‘fouun’, ‘1’, ‘2’, ‘3’, ‘4’);
 Insert into Userinfo (id,pwd,win,lose,u_kill,u_death)  values(‘ijungsk’, ‘205’, ‘532’, ‘0’, ‘6400’, ‘0’);
@@ -55,7 +65,3 @@ Insert into Userinfo (id,pwd,win,lose,u_kill,u_death)  values(‘kimchi’, ‘f
 Insert into Userinfo (id,pwd,win,lose,u_kill,u_death)  values(‘darrrkk’, ‘foradun’, ‘532’, ‘0’, ‘6400’, ‘0’);
 
 gcc -o DT_DB DT_DB.c -I/usr/include/mysql -L/usr/lib/mysql -lmysqlclient
-
-select * from Userinfo # Userinfo 테이블 확인;
-select * from count; # count 테이블 확인
-
