@@ -34,7 +34,7 @@ void sigPipe_handler(int epfd, int fd)
 
 void sigintIgnore(int signo)
 {
-	Log("sigint Ignored");
+	Log("sigintIgnored");
 }
 
 
@@ -165,9 +165,6 @@ int login(int epfd ,int fd)
 
 	str_len=read(fd,&loginMsg,sizeof(struct loginMsg)); // 로그인 단계 메시지를 받음
 
-    lseek(fd, 0, SEEK_SET);
-    memset(&auth,0,sizeof(struct loginAuth));
-
 	switch(loginMsg.msg_code)
 	{
 		case 100:// 로그인 요청
@@ -179,7 +176,7 @@ int login(int epfd ,int fd)
 
 			auth.msg_code=110;
 
-			if (compareID (request->id, request->pwd, &auth.profile, &auth.sid))
+			if (compareID (request->id, request->pwd, &auth.user, &auth.uid))
 			{
 				Log("success Login");
 				write(fd,&auth,sizeof(struct loginAuth)); // 로그인에 성공한 클라이언트 정보 전송
@@ -187,7 +184,8 @@ int login(int epfd ,int fd)
 
 			else {
 				Log("failed Login");
-				write(fd,&auth,sizeof(struct loginAuth)); // 실패 했으므로 sid -1 전송
+			//	write(fd,&auth,sizeof(int*2)); // 실패 했으므로 uid -1 전송
+				write(fd,&auth,sizeof(struct loginAuth)); // 실패 했으므로 uid -1 전송
 			}
 
 			break;
@@ -205,13 +203,15 @@ int login(int epfd ,int fd)
 				printf("join failed\n");
 				auth.msg_code=113;
 			}
-			write(fd,&auth,sizeof(struct loginAuth)); // 회원가입 확인용 블록을 막기위해서 전송한다.
+			write(fd,&auth.msg_code,sizeof(int)); // 회원가입 확인용 블록을 막기위해서 전송한다.
+			//write(fd,&auth,sizeof(struct loginAuth)); // 회원가입 확인용 블록을 막기위해서 전송한다.
 			break;
 
 		case 102: // 대기실 상태로 전환한다.
 			Log("request change to Lobby");
 			auth.msg_code=112;
-			write(fd,&auth,sizeof(struct loginAuth));
+			write(fd,&auth.msg_code,sizeof(int));
+			//write(fd,&auth,sizeof(struct loginAuth));
 			return 1;
 			break;
 
@@ -219,13 +219,125 @@ int login(int epfd ,int fd)
 			Log("request Quit Game");
 			auth.msg_code=510;
 
-			write(fd,&auth,sizeof(struct loginAuth));
+			write(fd,&auth.msg_code,sizeof(int));
+			//write(fd,&auth,sizeof(struct loginAuth));
+			return 4;
+			break;
+	}
+	return 0; // eState = 0 으로 로그인 다시 진행
+}
+
+int lobby(int epfd, int fd)
+{
+    int str_len;
+	int i, rcnt, divrcnt, modrcnt;
+	rcnt = inquiryRcount(); divrcnt = rcnt/4; modrcnt = rcnt%4;
+	int slot[4] = {0,-1,-1,-1}; // 유저들 슬롯을 관리
+	int broadcastfd[4] = {0}; // broadcast용 fd
+	struct lobbyMsg lobbyMsg;
+	struct lobbyRequest *request;
+	struct lobbyAuth lobbyAuth;
+	struct lobbyEnterAuth lobbyEnterAuth;
+	struct lobbyListAuth lobbyListAuth;
+	struct lobbyListAuth Listbuffer[divrcnt+1]; // 되는지 모름, 방 목록을 담기위한 임시 버퍼, 나중에 struct room이나 char배열로 교체
+	struct user updateUser;
+	struct inRoomBroadcast inRoomBroadcast;
+
+	Log("Lobby module");
+	LogNum("fd",fd);
+	//sigPipe_handler(epfd,fd);
+
+	str_len=read(fd,&lobbyMsg,sizeof(struct lobbyMsg)); // 로그인 단계 메시지를 받음
+
+	switch(lobbyMsg.msg_code)
+	{
+		case 200:// 방 생성 요청
+			//id, password 비교
+			Log("request RoomCreate");
+			request=(struct lobbyRequest *)&lobbyMsg;
+
+			lobbyListAuth.msg_code=210;
+			createRoom(request->uid, fd, &lobbyListAuth.room[0]);
+			write(fd,&lobbyListAuth,sizeof(struct lobbyListAuth));
+			return 2; // 방(inRoom) 상태로 전환
+			break;
+
+		case 201: // 방 접속 요청 , 방 번호를 전달 받으면 해당 방에 접속, 해당 방을 갱신한다.
+			Log("request RoomEnter");
+			request=(struct lobbyRequest *)&lobbyMsg; // 네명이 접속시 다 찼다는 예외처리 필요해보임
+
+
+			if (enterRoom(request->rid, request->uid, fd, slot, broadcastfd, &lobbyEnterAuth)) // rid가 존재하지 않을경우 실패
+			{
+				lobbyEnterAuth.msg_code=211;
+				write(fd,&lobbyEnterAuth,sizeof(struct lobbyEnterAuth));
+
+				inRoomBroadcast.msg_code=321;
+				bringUserinfo(request->uid, &updateUser);
+				memcpy(&inRoomBroadcast.slot, &slot, sizeof(slot));
+				memcpy(&inRoomBroadcast.user, &updateUser, sizeof(updateUser));
+
+				for(i = 0; i < 4; i++) // guest들에게 들어온 유저에 대한 정보를 전달
+				{
+					if(broadcastfd[i] == fd || broadcastfd[i] == 0) // 없는 유저나 자신은 그냥 넘어감
+						continue;
+
+					write(broadcastfd[i],&inRoomBroadcast,sizeof(struct inRoomBroadcast));
+				}
+
+				return 2; // 방(inRoom) 상태로 전환
+			}
+			else // 방 접속 실패
+			{
+				lobbyEnterAuth.msg_code=214;
+				write(fd,&lobbyEnterAuth.msg_code,sizeof(int));
+			//	write(fd,&lobbyEnterAuth,sizeof(struct lobbyEnterAuth));
+			}
+			break;
+
+		case 202: // 방 리스트 요청
+			Log("request RoomList");
+			request=(struct lobbyRequest *)&lobbyMsg;
+
+			lobbyListAuth.msg_code=212;
+
+			bringRoomList(&Listbuffer, divrcnt, modrcnt);
+
+			for(i = 0; i < divrcnt; i++)
+            { // 방 목록 전송 과정 1
+                memcpy(&lobbyListAuth.room[0], &Listbuffer[i].room[0], sizeof(struct room));
+                memcpy(&lobbyListAuth.room[1], &Listbuffer[i].room[1], sizeof(struct room));
+                memcpy(&lobbyListAuth.room[2], &Listbuffer[i].room[2], sizeof(struct room));
+                memcpy(&lobbyListAuth.room[3], &Listbuffer[i].room[3], sizeof(struct room));
+                write(fd,&lobbyListAuth,sizeof(struct lobbyListAuth));
+			}
+
+			for (i = 0; i < modrcnt; i++) { // 방 목록 전송 과정 2 0~3개 남은 방들을 담아 전송
+			memcpy(&lobbyListAuth.room[i], &Listbuffer[divrcnt].room[i], sizeof(struct room));
+			}
+			write(fd,&lobbyListAuth,sizeof(struct lobbyListAuth));
+			break;
+
+		case 203: // 방 개수 요청, lobby 전환시 클라이언트가 자동으로 신청함
+			Log("request RoomCount");
+			lobbyAuth.msg_code = 213;
+			lobbyAuth.roomCount = rcnt;
+			write(fd, &lobbyAuth, sizeof(struct lobbyAuth));
+
+		case 500: // 게임 종료 요청, eState를 4로 바꿔야함
+			Log("request Quit Game");
+			lobbyListAuth.msg_code=510;
+			write(fd,&lobbyListAuth.msg_code,sizeof(int));
+			//write(fd,&lobbyListAuth,sizeof(struct lobbyListAuth));
 			return 4;
 
 			break;
 	}
+}
 
-	return 0; // eState = 0 으로 로그인 다시 진행
+int inRoom(int epfd, int fd)
+{
+	return 4;
 }
 
 //server main code
@@ -268,6 +380,21 @@ int server(char *port)
 				eState = login(epfd, eFD);
 			}
 
+			else if(eState == 1)//대기실 모듈일 때
+			{
+				eState = lobby(epfd, eFD);
+			}
+
+			else if(eState == 2)//방(inRoom) 모듈일 때
+			{
+				eState = inRoom(epfd, eFD);
+			}
+			/*
+			else if(eState == 3)//인게임 모듈일 때
+			{
+				eState = (epfd, eFD);
+			}
+            */
 			else if(eState == 4) // 종료 요청
 			{
 				closeClient(epfd, eFD);

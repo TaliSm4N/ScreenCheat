@@ -8,8 +8,11 @@
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <sys/epoll.h>
+#include <signal.h>
+#include <fcntl.h>
 #include "log.h"
 #include "msg.h"
+#include "database.h"
 
 #define EPOLL_SIZE 50
 
@@ -24,10 +27,16 @@ typedef struct eventData
 	// 추가할 거 있으면 필요할 때 추가
 }eventData;
 
+void sigInt_handler(void);
+//void sigPipe_handler(int, int);
+void sigintIgnore(int);
+void setnonblockingmode(int);
 int setListening(char *);
 int setEpoll(int);
-int connectClient(int,int);
-int login(int);
+int connectClient(int, int);
+void closeClient(int, int);
+int login(int, int);
+int lobby(int, int);
 int server(char *port);
 
 #endif
