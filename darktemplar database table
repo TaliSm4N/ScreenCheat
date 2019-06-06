@@ -24,10 +24,11 @@ create table RoomList (
 rid int not null primary key, # 방 번호, 안 겹쳐야 함
 ucount int not null default 1,
 hname varchar(16) not null unique, # 호스트 이름, 안 겹쳐야 함
-host2 int default 0, # host2의 sid, 겹칠 수 없다 
-host3 int default 0, # host3의 sid, 겹칠 수 없다
-host4 int default 0, # host4의 sid, 겹칠 수 없다
+host2 int default 0 unique, # host2의 sid, 겹칠 수 없다 
+host3 int default 0 unique, # host3의 sid, 겹칠 수 없다
+host4 int default 0 unique # host4의 sid, 겹칠 수 없다
 );
+
 아이템 정보 테이블 – 수량, 종류, 코드
 create table item (
 itemCount int not null, # 아이템 수량, 필요 없을 수 있음
