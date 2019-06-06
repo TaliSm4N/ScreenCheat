@@ -1,21 +1,10 @@
 #ifndef MSG_H
 #define MSG_H
 
-//profile에 대한 구조체
-struct profile
-{
+//user에 대한 구조체
+struct user{
 	char id[16];
-	int win;
-	int lose;
-	int kill;
-	int death;
-};
-
-//user에 대한 구조체, inRoom 에서 접속시 전송
-struct user //[3]
-{
-	char id[16];
-	int slot;
+//	int slot;
 	int win;
 	int lose;
 	int kill;
@@ -55,8 +44,8 @@ struct loginAuth
 {
 	int msg_code;
 
-	int sid;
-	struct profile profile;
+	int uid;
+	struct user user;
 };
 
 #endif
@@ -78,7 +67,7 @@ struct lobbyRequest
 {
 	int msg_code;
 	int rid;
-	int sid;
+	int uid;
 };
 
 //대기실 방 개수, write 두 번 쓰기는 아까워서 만듬
@@ -89,7 +78,7 @@ struct lobbyAuth
 };
 
 //대기실 생성, 리스트 승인
-struct lobbyListAuth//[4]
+struct lobbyListAuth
 {
 	int msg_code;
 	struct room room[4];
@@ -97,13 +86,22 @@ struct lobbyListAuth//[4]
 };
 
 //대기실 접속 승인
-struct lobbyEnterAuth//[3]
+struct lobbyEnterAuth
 {
 	int msg_code;
+	int slot[4];
     struct user user[3];
 
 };
 
+//유저 브로드캐스트
+struct inRoomBroadcast
+{
+	int msg_code;
+	int slot[4];
+    struct user user;
+
+};
 
 #endif
 
