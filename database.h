@@ -1,16 +1,23 @@
 #include <mysql/mysql.h>
 
-int     runQuery(char *query); // ì¿¼ë¦¬ ì‹¤í–‰
-int     fetchRow(void); //ë¡œìš° ì¡°íšŒ , sql_resultì— queryë¡œ ë°›ì€ rowë“¤ì„ ì‹¤í–‰ë•Œë§ˆë‹¤ ì°¨ë¡€ëŒ€ë¡œ ë°›ì•„ì˜´
+int     runQuery(char *); // Äõ¸® ½ÇÇà
+int     fetchRow(void); //·Î¿ì Á¶È¸ , sql_result¿¡ query·Î ¹ŞÀº rowµéÀ» ½ÇÇà¶§¸¶´Ù Â÷·Ê´ë·Î ¹Ş¾Æ¿È
 int     connectDB(void);
 void    closeDB(void);
-// ë¡œê·¸ì¸
-void	joinMembership(char *id, char *pwd); // íšŒì›ê°€ì…, ìœ ì €ì˜ ìˆ˜ë„ ê°±ì‹ ëœë‹¤.
-int	compareID(char *id, char *pwd,struct profile *Upf,int *sid); // ID, PWDë¥¼ ë¹„êµí•œë‹¤. TRUEë©´ ì¼ì¹˜, FALSEë©´ ì¼ì¹˜í•˜ëŠ” ì •ë³´ê°€ ì—†ë‹¤(í‹€ë¦¬ëŠ”ê²ƒë„ í•´ë‹¹)
-// ë°©
-void	createRoom(struct room Room); // ë°© ìƒì„±ì‹œ rcntì™€ list ì¶”ê°€
-void	bringRoomList(); // ë°© ëª©ë¡ì„ ê°€ì ¸ì˜¨ë‹¤.
-void	updateRoom(); // ìƒì„±ëœ ë°©ì— ì°¸ì—¬/í‡´ì¥ì‹œ ì¸ì› ë³€ê²½
-void	deleteRoom(); // ë°© ì‚­ì œì‹œ rcntë¥¼ ë‚®ì¶”ê³  listì—ì„œ ì œì™¸í•œë‹¤.
 
-void    DB_errMsg(char *errMsg); // ì—ëŸ¬ë©”ì‹œì§€ ì¶œë ¥
+int     addCount(char *); //À¯Àú³ª ¹æÀÇ °³¼ö¸¦ È£Ãâ¸¶´Ù ÇÏ³ª¾¿ Ãß°¡ÇÑ´Ù.
+int 	inquiryRcount(); // Roomcount Á¶È¸
+char*   convertSid(int); // sid¸¦ ÅëÇØ user id¸¦ ¾ò¾î¿Â´Ù
+
+// ·Î±×ÀÎ
+int 	joinMembership(char *, char *); // È¸¿ø°¡ÀÔ, À¯ÀúÀÇ ¼öµµ °»½ÅµÈ´Ù.
+int		compareID(char *, char *,struct profile *,int *); // ID, PWD¸¦ ºñ±³ÇÑ´Ù. TRUE¸é ÀÏÄ¡, FALSE¸é ÀÏÄ¡ÇÏ´Â Á¤º¸°¡ ¾ø´Ù(Æ²¸®´Â°Íµµ ÇØ´ç)
+
+// ¹æ
+void	createRoom(int, struct room *); // ¹æ »ı¼º½Ã rcnt¿Í list Ãß°¡
+void	bringRoomList(struct lobbyListAuth *[],int, int); // ¹æ ¸ñ·ÏÀ» °¡Á®¿Â´Ù, ¹æ ¼ö¸¦ ¸®ÅÏ
+int 	enterRoom(int,int, struct lobbyEnterAuth *); // ¹æ Á¢¼Ó
+void	updateRoom(); // »ı¼ºµÈ ¹æ¿¡ Âü¿©/ÅğÀå½Ã ÀÎ¿ø º¯°æ
+void	deleteRoom(); // ¹æ »èÁ¦½Ã rcnt¸¦ ³·Ãß°í list¿¡¼­ Á¦¿ÜÇÑ´Ù.
+
+void    DB_errMsg(char *); // ¿¡·¯¸Ş½ÃÁö Ãâ·Â
