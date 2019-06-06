@@ -4,6 +4,8 @@ MYSQL_RES *sql_result;
 MYSQL_ROW sql_row;
 MYSQL *conn;
 
+char query[255] = {0}; // 임시로 담을 버퍼
+
 // 쿼리 실행
 int runQuery(char *query)
 {
@@ -65,8 +67,8 @@ void closeDB(void)
 int addCount(char *cntType)
 {
 	int cnt;
-	char query[255] = {0}; // 임시로 담을 버퍼
 
+    memset(query, 0x00, sizeof(query));
 	runQuery("Select * from count");
 	fetchRow();
     cnt = atoi(sql_row[0]) + 1; // 유저 수 하나 추가
@@ -85,7 +87,7 @@ int inquiryRcount()
     return atoi(sql_row[1]);
 }
 // sid로 유저id를 찾아온다.
-char* convertSid(int sid)
+char* convertUid(int uid)
 {
 	runQuery("Select * from count");
 	fetchRow();
@@ -96,10 +98,24 @@ char* convertSid(int sid)
 	for(int i=0; i < ucnt; i++)
 	{
 	    fetchRow(); // 검사 진행
-		if (sid == atoi(sql_row[0]))
+		if (uid == atoi(sql_row[0]))
 			return sql_row[1];
 	}
 	return NULL; // 유저id를 찾지 못함
+}
+
+// uid에 맞는 유저의 정보를 가져옴
+void bringUserinfo(int uid, struct user *updateUser)
+{
+    memset(query, 0x00, sizeof(query));
+    snprintf(query, 255, "select * from Userinfo where uid = %d", uid);
+    runQuery(query);
+    fetchRow();
+    strncpy(updateUser->id, sql_row[1], sizeof(updateUser->id));
+    updateUser->win = atoi(sql_row[3]);
+    updateUser->lose  = atoi(sql_row[4]);
+    updateUser->kill = atoi(sql_row[5]);
+    updateUser->death = atoi(sql_row[6]);
 }
 
 //유저 회원가입을 시킴, sid는 자동으로 0부터 1씩 추가된다, 유저의 수도 늘어남
@@ -107,7 +123,6 @@ int joinMembership(char *id, char *pwd)
 {
 
     int ucnt;
-	char query[255] = {0}; // 임시로 담을 버퍼
 
     memset(query, 0x00, sizeof(query));
 	snprintf(query, 255,"insert into Userinfo (id, pwd) values('%s', '%s')", id, pwd);
@@ -124,7 +139,7 @@ int joinMembership(char *id, char *pwd)
     return 1;
 }
 
-int compareID(char *id, char *pwd,struct profile *Upf,int * sid) // ID, PWD를 비교한다. TRUE면 일치, FALSE면 일치하는 정보가 없다(틀리는것도 해당)
+int compareID(char *id, char *pwd,struct user *Upf,int * uid) // ID, PWD를 비교한다. TRUE면 일치, FALSE면 일치하는 정보가 없다(틀리는것도 해당)
 { // ucnt는 단순히 반복문 수행을 위해서 유저 수를 체크하는 변수
     runQuery("Select * from count");
 	fetchRow();
@@ -138,7 +153,7 @@ int compareID(char *id, char *pwd,struct profile *Upf,int * sid) // ID, PWD를 비
 	    fetchRow(); // 검사 진행
 		if ((!strcmp(sql_row[1],id))&&(!strcmp(sql_row[2],pwd))) { // 유저의 id,pwd가 일치하는 상황
 			//유저의 정보를 보내기위해 불러온 값을 저장한다.
-			*sid = atoi(sql_row[0]);
+			*uid = atoi(sql_row[0]);
 			strncpy(Upf->id, sql_row[1], sizeof(Upf->id));
 			Upf->win = atoi(sql_row[3]);
 			Upf->lose = atoi(sql_row[4]);
@@ -151,19 +166,19 @@ int compareID(char *id, char *pwd,struct profile *Upf,int * sid) // ID, PWD를 비
         else
 			continue;
 	}
-    *sid = -1; // login fail
+    *uid = -1; // login fail
 	return 0;
 }
 
-// 방 생성시 list에 추가(방 번호, 호스트 이름)
-void createRoom(int sid, struct room *Rinfo)
+// 방 생성시 list에 추가(방 번호, 호스트 이름,호스트 fd)
+void createRoom(int uid, int fd, struct room *Rinfo)
 {
     int rcnt;
-	char query[255] = {0}; // 임시로 담을 버퍼
 //	char idBuf[16] = {0};
 
-	//strncpy(idBuf, convertSid(sid), sizeof(idBuf));
-	snprintf(query, 255, "insert into RoomList (rid, hname)values('%d', '%s')", addCount("rcnt"), convertSid(sid));
+	//strncpy(idBuf, convertUid(uid), sizeof(idBuf));
+	memset(query, 0x00, sizeof(query));
+	snprintf(query, 255, "insert into RoomList (rid, hname,hostfd) values('%d', '%s','%d')", addCount("rcnt"), convertUid(uid), fd);
 	runQuery(query);
 
     rcnt = inquiryRcount();
@@ -186,7 +201,7 @@ void bringRoomList(struct lobbyListAuth *Rbuffer[],int divrcnt, int modrcnt) //
 
 	runQuery("Select * from RoomList"); // 방 목록 가져옴
 
-   for(i = 0;i < divrcnt; i++)
+    for(i = 0;i < divrcnt; i++)
     { // 방 목록 전송 과정 1
         fetchRow();
         for(j = 0; j < 4; j++)
@@ -207,12 +222,13 @@ void bringRoomList(struct lobbyListAuth *Rbuffer[],int divrcnt, int modrcnt) //
 }
 
 // 방 접속시 호출, 방을 갱신하고 다른 유저의 정보를 불러옴, 방장 + host1,2,3 구조
-int enterRoom(int rid, int sid, struct lobbyEnterAuth *RoomUser)
+int enterRoom(int rid, int uid, int fd, int *slots, int *broadcastfd, struct lobbyEnterAuth *RoomUser)
 {
     int ucnt, i, j;
+    int guest[3] = {0}; // guest 1,2,3의 uid
     char roomHostId[16] = {0}; // 방장의 id를 넣을 임시 버퍼
-    char query[255] = {0}; // query 진행용 임시 버퍼
-    int host[3] = {0}; // host 1,2,3의 sid를 넣을 임시 버퍼
+
+    memset(query, 0x00, sizeof(query));
 
     // 해당 방 번호에 있는 유저의 기록을 불러온다
     snprintf(query, 255, "Select * from RoomList where rid = %d",rid);
@@ -223,61 +239,69 @@ int enterRoom(int rid, int sid, struct lobbyEnterAuth *RoomUser)
     }
     fetchRow();
 
-	//host 들의 sid와 방장의 id, 방에 있는 유저 수 조회
+	//guest 들의 uid와 방장의 id, 방에 있는 유저 수 조회
     ucnt = atoi(sql_row[1]); // 방에 있는 유저 수
     strncpy(roomHostId, sql_row[2], sizeof(roomHostId)); // 방장의 id를 가져옴
-    for(i = 0; i < 3; i++) // host 1,2,3 sid 가져옴
+    for(i = 0; i < 3; i++) // guest 1,2,3 uid 가져옴
     {
-        host[i] = atoi(sql_row[i+3]);
+        guest[i] = atoi(sql_row[i+3]);
     }
+
+    for(i = 0; i < 4; i++) // broadcast용 fd 저장
+    {
+        broadcastfd[i] = atoi(sql_row[i+6]);
+    }
+
     //방장의 정보를 user[0]에 대입
     snprintf(query, 255, "Select * from Userinfo where id = '%s'", roomHostId);
     fetchRow();
     strncpy(RoomUser->user[0].id, sql_row[1], sizeof(RoomUser->user[0].id));
-    RoomUser->user[0].slot = 0; // 슬롯에 배치되었다.
+ //   RoomUser->user[0].slot = slots[0]; // 1번 슬롯 고정이므로
     RoomUser->user[0].win = atoi(sql_row[3]);
     RoomUser->user[0].lose = atoi(sql_row[4]);
     RoomUser->user[0].kill = atoi(sql_row[5]);
     RoomUser->user[0].death = atoi(sql_row[6]);
 
-    // 방장을 제외한 host 1,2,3의 정보를 넣는 과정
+    // 방장을 제외한 guest 1,2,3의 정보를 넣는 과정
     for(i = 0; i < 3; i++)
     {// 처음 빈칸이 나오면 들어올 host의 정보를 삽입하고 다음 빈칸은 그냥 continue
-        if(host[i] == 0) // 이 slot은 비어있음, 접속한 유저를 삽입한다.
+        if(guest[i] == 0) // 이 slot은 비어있음, 접속한 유저를 삽입한다.
         {
-            snprintf(query, 255, "update RoomList set host%d = %d where rid = %d", i+2, sid, rid);
+            slots[i+1] = 0; // 유저를 삽입 하였으므로 slot의 값을 변경
+            snprintf(query, 255, "update RoomList set guest%d = %d, guest%dfd = %d where rid = %d", i+2, uid, i+2, fd, rid);
             runQuery(query);
             break;
         }
     }
 	for(i = 0; i <3; i++)
 	{
-		if(host[i] == 0) // 다음 빈칸이므로 continue
+		if(guest[i] == 0) // 다음 빈칸이므로 continue
 			continue;
 
 		else // 유저 정보를 대입한다, segmentation fault를 막기위해 대입 후 다시 for을 돌려 유저 정보를 다시 대입한다.
 		{
-			snprintf(query, 255, "Select * from Userinfo where sid = %d", host[i]);
+			snprintf(query, 255, "Select * from Userinfo where uid = %d", guest[i]);
 			fetchRow();
 			strncpy(RoomUser->user[1].id, sql_row[1], sizeof(RoomUser->user[1].id));
-			RoomUser->user[1].slot = 0; // 슬롯에 배치되었다.
+		//	RoomUser->user[1].slot = slots[i+1]; // i+1번 슬롯에 배치되어 있다.
 			RoomUser->user[1].win = atoi(sql_row[3]);
 			RoomUser->user[1].lose = atoi(sql_row[4]);
 			RoomUser->user[1].kill = atoi(sql_row[5]);
 			RoomUser->user[1].death = atoi(sql_row[6]);
+			i++;
 			break;
 		}
 	}
 	for(i; i <3; i++)
 	{
-		if(host[i] == 0) // 다음 빈칸이므로 continue
+		if(guest[i] == 0) // 다음 빈칸이므로 continue
 			continue;
 		else
 		{
-			snprintf(query, 255, "Select * from Userinfo where sid = %d", host[i]);
+			snprintf(query, 255, "Select * from Userinfo where uid = %d", guest[i]);
 			fetchRow();
 			strncpy(RoomUser->user[2].id, sql_row[1], sizeof(RoomUser->user[2].id));
-			RoomUser->user[2].slot = 0; // 슬롯에 배치되었다.
+	//		RoomUser->user[2].slot = slots[i+1]; // i+1번 슬롯에 배치되어 있다.
 			RoomUser->user[2].win = atoi(sql_row[3]);
 			RoomUser->user[2].lose = atoi(sql_row[4]);
 			RoomUser->user[2].kill = atoi(sql_row[5]);
@@ -285,13 +309,14 @@ int enterRoom(int rid, int sid, struct lobbyEnterAuth *RoomUser)
 		}
 	}
 
-    // 들어가려는 방의 ucount 갱신 과정, host 삽입
+    // 들어가려는 방의 ucount 갱신 과정, guest 삽입
     snprintf(query, 255, "update RoomList set ucount = %d where rid = %d", ucnt+1, rid);
     runQuery(query);
 
 	Log("EnterRoom Success!");
 	return 1; // 성공적으로 마침
 }
+
 
 void DB_errMsg(char *errMsg)
 {
