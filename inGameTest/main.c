@@ -2,12 +2,12 @@
 
 int main(int argc,char *argv[])
 {
-	if(argc!=2)
+	if(argc!=3)
 	{
-		error_handling("need port num");
+		error_handling("need tcp udp port num");
 	}
 
-	testIngame(0,atoi(argv[1]),PLAYER_CNT);
+	testIngame(atoi(argv[1]),atoi(argv[2]),PLAYER_CNT);
 
 	return 0;
 }

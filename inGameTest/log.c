@@ -37,5 +37,10 @@ void LogUDPMsg(udpMsg msg)
 
 }
 
+void LogLoc(loc location)
+{
+	fprintf(stdout,"pos : (%f,%f,%f)\n",location.x,location.y,location.z);
+}
+
 
 //각 구조체에 대한 LOG형태도 추가되어야함
