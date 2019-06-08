@@ -1,10 +1,20 @@
 #ifndef MSG_H
 #define MSG_H
 
+//profile에 대한 구조체
+struct profile{
+	char id[16];
+	int win;
+	int lose;
+	int kill;
+	int death;
+};
+
 //user에 대한 구조체
 struct user{
 	char id[16];
-//	int slot;
+	int slot; // n번 슬롯
+	int stats; // 상태
 	int win;
 	int lose;
 	int kill;
@@ -22,7 +32,7 @@ struct room //[4]
 #ifndef LOGIN
 #define LOGIN
 
-//로그인 메시지 원형 40byte
+//로그인 클라이언트의 메시지 원형 40byte
 struct loginMsg
 {
 	int msg_code;
@@ -45,7 +55,7 @@ struct loginAuth
 	int msg_code;
 
 	int uid;
-	struct user user;
+	struct profile profile;
 };
 
 #endif
@@ -54,18 +64,19 @@ struct loginAuth
 #define LOBBY
 
 
-//대기실 메시지 원형 120byte
+//대기실 클라이언트의 메시지 원형 12byte
 struct lobbyMsg
 {
 	int msg_code;
 
-	char data[116];
+	char data[8];
 };
 
 //대기실 요청 , 방 생성, 접속, 리스트 요청
 struct lobbyRequest
 {
 	int msg_code;
+
 	int rid;
 	int uid;
 };
@@ -74,35 +85,85 @@ struct lobbyRequest
 struct lobbyAuth
 {
     int msg_code;
+
     int roomCount;
 };
 
-//대기실 생성, 리스트 승인
+// 대기실 방 생성 승인
+struct lobbyCreateAuth
+{
+	int msg_code;
+
+	int rid;
+};
+
+//대기실 리스트 승인
 struct lobbyListAuth
 {
 	int msg_code;
+
 	struct room room[4];
 
 };
 
-//대기실 접속 승인
+//대기실 방 접속 승인
 struct lobbyEnterAuth
 {
 	int msg_code;
-	int slot[4];
+
+	int slot;
+	int ucnt;
     struct user user[3];
 
 };
 
 //유저 브로드캐스트
-struct inRoomBroadcast
+struct enterRoomBroadcast
 {
 	int msg_code;
-	int slot[4];
+
     struct user user;
 
 };
-
 #endif
 
+#ifndef INROOM
+#define INROOM
+
+//방 클라이언트의 메시지 원형 12byte
+struct inRoomMsg
+{
+	int msg_code;
+
+	char data[8];
+};
+
+//방 요청 , 상태 변경, 게임 시작, 방 퇴장 요청
+struct inRoomRequest
+{
+	int msg_code;
+
+	int stats;
+	int rid;
+};
+
+//게임 시작 승인
+struct inRoomStartAuth
+{
+	int msg_code;
+
+	int portNum; // udp 포트 번호
+};
+
+//유저가 상태를 변경했다고 다른 유저들에게 알림
+struct inRoomStateBroadcast
+{
+    int msg_code;
+
+    int slot;
+    int stats;
+};
+
+
+#endif
 #endif
