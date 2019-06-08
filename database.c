@@ -139,7 +139,7 @@ int joinMembership(char *id, char *pwd)
     return 1;
 }
 
-int compareID(char *id, char *pwd,struct user *Upf,int * uid) // ID, PWD¸¦ ºñ±³ÇÑ´Ù. TRUE¸é ÀÏÄ¡, FALSE¸é ÀÏÄ¡ÇÏ´Â Á¤º¸°¡ ¾ø´Ù(Æ²¸®´Â°Íµµ ÇØ´ç)
+int compareID(char *id, char *pwd,struct profile *Upf,int * uid) // ID, PWD¸¦ ºñ±³ÇÑ´Ù. TRUE¸é ÀÏÄ¡, FALSE¸é ÀÏÄ¡ÇÏ´Â Á¤º¸°¡ ¾ø´Ù(Æ²¸®´Â°Íµµ ÇØ´ç)
 { // ucnt´Â ´Ü¼øÈ÷ ¹İº¹¹® ¼öÇàÀ» À§ÇØ¼­ À¯Àú ¼ö¸¦ Ã¼Å©ÇÏ´Â º¯¼ö
     runQuery("Select * from count");
 	fetchRow();
@@ -166,25 +166,25 @@ int compareID(char *id, char *pwd,struct user *Upf,int * uid) // ID, PWD¸¦ ºñ±³Ç
         else
 			continue;
 	}
-    *uid = -1; // login fail
+	// login fail
+    //*uid = -1; 
 	return 0;
 }
 
 // ¹æ »ı¼º½Ã list¿¡ Ãß°¡(¹æ ¹øÈ£, È£½ºÆ® ÀÌ¸§,È£½ºÆ® fd)
-void createRoom(int uid, int fd, struct room *Rinfo)
-{
+void createRoom(int uid, int fd, struct lobbyCreateAuth *Rinfo)
+{ 
     int rcnt;
-//	char idBuf[16] = {0};
-
-	//strncpy(idBuf, convertUid(uid), sizeof(idBuf));
+	
+	// rcnt = addCount("rcnt") ¸Ş¼¼Áö°£ 1¹ø ÀÌ»ó ³¯¾Æ¿À´Â ¿À·ù°¡ ¾ø´Ù¸é °¡´É
 	memset(query, 0x00, sizeof(query));
 	snprintf(query, 255, "insert into RoomList (rid, hname,hostfd) values('%d', '%s','%d')", addCount("rcnt"), convertUid(uid), fd);
 	runQuery(query);
 
     rcnt = inquiryRcount();
-
+	
+	
     Rinfo->rid = rcnt;
-    Rinfo->ucount = 1;
 
 	if (sql_result)
                 mysql_free_result(sql_result);
@@ -195,9 +195,7 @@ void createRoom(int uid, int fd, struct room *Rinfo)
 // ¹æ ¸ñ·ÏÀ» °¡Á®¿Â´Ù.
 void bringRoomList(struct lobbyListAuth *Rbuffer[],int divrcnt, int modrcnt) //
 {
-	int  i = 0, j; //,rcnt;
-
-//    rcnt = inquiryRcount();
+	int  i = 0, j; 
 
 	runQuery("Select * from RoomList"); // ¹æ ¸ñ·Ï °¡Á®¿È
 
@@ -222,25 +220,29 @@ void bringRoomList(struct lobbyListAuth *Rbuffer[],int divrcnt, int modrcnt) //
 }
 
 // ¹æ Á¢¼Ó½Ã È£Ãâ, ¹æÀ» °»½ÅÇÏ°í ´Ù¸¥ À¯ÀúÀÇ Á¤º¸¸¦ ºÒ·¯¿È, ¹æÀå + host1,2,3 ±¸Á¶
-int enterRoom(int rid, int uid, int fd, int *slots, int *broadcastfd, struct lobbyEnterAuth *RoomUser)
+int enterRoom(int rid, int uid, int fd, int *stats, int *broadcastfd, struct lobbyEnterAuth *RoomUser)
 {
     int ucnt, i, j;
     int guest[3] = {0}; // guest 1,2,3ÀÇ uid
     char roomHostId[16] = {0}; // ¹æÀåÀÇ id¸¦ ³ÖÀ» ÀÓ½Ã ¹öÆÛ
-
+	
     memset(query, 0x00, sizeof(query));
 
     // ÇØ´ç ¹æ ¹øÈ£¿¡ ÀÖ´Â À¯ÀúÀÇ ±â·ÏÀ» ºÒ·¯¿Â´Ù
     snprintf(query, 255, "Select * from RoomList where rid = %d",rid);
-    if (runQuery(query) == -1)
+	i = runQuery(query); // ¿À·ù Ã¼Å©¿ëÀ¸·Î ÀÓ½Ã·Î ¹Ú¾ÆµÒ
+	fetchRow();
+	ucnt = atoi(sql_row[1]); // ¹æ¿¡ ÀÖ´Â À¯Àú ¼ö
+	RoomUser->ucnt = ucnt; // ¹æ¿¡ ÀÖ´Â À¯Àú ¼ö¸¦ ´ãÀ½ 
+    if (i == -1 || ucnt == 4 ) // ÀÏÄ¡ÇÏ´Â rid°¡ ¾ø°Å³ª ucnt = 4ÀÎ °æ¿ì
     {
         Log("EnterRoom failed");
-        return 0; // ÀÏÄ¡ÇÏ´Â rid°¡ ¾øÀ½
+        return 0; 
     }
-    fetchRow();
-
-	//guest µéÀÇ uid¿Í ¹æÀåÀÇ id, ¹æ¿¡ ÀÖ´Â À¯Àú ¼ö Á¶È¸
-    ucnt = atoi(sql_row[1]); // ¹æ¿¡ ÀÖ´Â À¯Àú ¼ö
+    
+	
+	//guest µéÀÇ uid¿Í ¹æÀåÀÇ id Á¶È¸
+    
     strncpy(roomHostId, sql_row[2], sizeof(roomHostId)); // ¹æÀåÀÇ id¸¦ °¡Á®¿È
     for(i = 0; i < 3; i++) // guest 1,2,3 uid °¡Á®¿È
     {
@@ -254,9 +256,11 @@ int enterRoom(int rid, int uid, int fd, int *slots, int *broadcastfd, struct lob
 
     //¹æÀåÀÇ Á¤º¸¸¦ user[0]¿¡ ´ëÀÔ
     snprintf(query, 255, "Select * from Userinfo where id = '%s'", roomHostId);
+	runQuery(query);
     fetchRow();
     strncpy(RoomUser->user[0].id, sql_row[1], sizeof(RoomUser->user[0].id));
- //   RoomUser->user[0].slot = slots[0]; // 1¹ø ½½·Ô °íÁ¤ÀÌ¹Ç·Î
+    RoomUser->user[0].slot = 1; // 1¹ø ½½·Ô °íÁ¤ÀÌ¹Ç·Î
+	RoomUser->user[0].stats = stats[0];
     RoomUser->user[0].win = atoi(sql_row[3]);
     RoomUser->user[0].lose = atoi(sql_row[4]);
     RoomUser->user[0].kill = atoi(sql_row[5]);
@@ -265,10 +269,11 @@ int enterRoom(int rid, int uid, int fd, int *slots, int *broadcastfd, struct lob
     // ¹æÀåÀ» Á¦¿ÜÇÑ guest 1,2,3ÀÇ Á¤º¸¸¦ ³Ö´Â °úÁ¤
     for(i = 0; i < 3; i++)
     {// Ã³À½ ºóÄ­ÀÌ ³ª¿À¸é µé¾î¿Ã hostÀÇ Á¤º¸¸¦ »ğÀÔÇÏ°í ´ÙÀ½ ºóÄ­Àº ±×³É continue
-        if(guest[i] == 0) // ÀÌ slotÀº ºñ¾îÀÖÀ½, Á¢¼ÓÇÑ À¯Àú¸¦ »ğÀÔÇÑ´Ù.
+        if(guest[i] == 0) // ÀÌ slotÀº ºñ¾îÀÖÀ½, Á¢¼ÓÇÑ À¯Àú¸¦ »ğÀÔÇÏ°í ucount °»½Å
         {
-            slots[i+1] = 0; // À¯Àú¸¦ »ğÀÔ ÇÏ¿´À¸¹Ç·Î slotÀÇ °ªÀ» º¯°æ
-            snprintf(query, 255, "update RoomList set guest%d = %d, guest%dfd = %d where rid = %d", i+2, uid, i+2, fd, rid);
+			RoomUser->slot = i+2; // »ğÀÔµÈ À¯ÀúÀÇ ½½·Ô ¹øÈ£ 
+            stats[i+1] = 0; // À¯Àú¸¦ »ğÀÔ ÇÏ¿´À¸¹Ç·Î À¯Àú »óÅÂÀÇ °ªÀ» º¯°æ
+            snprintf(query, 255, "update RoomList set ucount = %d,guest%d = %d, guest%dfd = %d where rid = %d", ucnt+1, i+2, uid, i+2, fd, rid);
             runQuery(query);
             break;
         }
@@ -283,7 +288,8 @@ int enterRoom(int rid, int uid, int fd, int *slots, int *broadcastfd, struct lob
 			snprintf(query, 255, "Select * from Userinfo where uid = %d", guest[i]);
 			fetchRow();
 			strncpy(RoomUser->user[1].id, sql_row[1], sizeof(RoomUser->user[1].id));
-		//	RoomUser->user[1].slot = slots[i+1]; // i+1¹ø ½½·Ô¿¡ ¹èÄ¡µÇ¾î ÀÖ´Ù.
+			RoomUser->user[1].slot = i+2; // i+2¹ø ½½·Ô¿¡ ¹èÄ¡µÇ¾î ÀÖ´Ù.
+			RoomUser->user[1].stats = stats[i+1]; // i+1¹ø »óÅÂ¸¦ º¸¸é ¾Ï
 			RoomUser->user[1].win = atoi(sql_row[3]);
 			RoomUser->user[1].lose = atoi(sql_row[4]);
 			RoomUser->user[1].kill = atoi(sql_row[5]);
@@ -301,7 +307,8 @@ int enterRoom(int rid, int uid, int fd, int *slots, int *broadcastfd, struct lob
 			snprintf(query, 255, "Select * from Userinfo where uid = %d", guest[i]);
 			fetchRow();
 			strncpy(RoomUser->user[2].id, sql_row[1], sizeof(RoomUser->user[2].id));
-	//		RoomUser->user[2].slot = slots[i+1]; // i+1¹ø ½½·Ô¿¡ ¹èÄ¡µÇ¾î ÀÖ´Ù.
+			RoomUser->user[2].slot = i+2; // i+2¹ø ½½·Ô¿¡ ¹èÄ¡µÇ¾î ÀÖ´Ù.
+			RoomUser->user[2].stats = stats[i+1]; // i+1¹ø »óÅÂ¸¦ º¸¸é ¾Ï
 			RoomUser->user[2].win = atoi(sql_row[3]);
 			RoomUser->user[2].lose = atoi(sql_row[4]);
 			RoomUser->user[2].kill = atoi(sql_row[5]);
@@ -309,11 +316,36 @@ int enterRoom(int rid, int uid, int fd, int *slots, int *broadcastfd, struct lob
 		}
 	}
 
-    // µé¾î°¡·Á´Â ¹æÀÇ ucount °»½Å °úÁ¤, guest »ğÀÔ
-    snprintf(query, 255, "update RoomList set ucount = %d where rid = %d", ucnt+1, rid);
-    runQuery(query);
-
 	Log("EnterRoom Success!");
+	return 1; // ¼º°øÀûÀ¸·Î ¸¶Ä§
+}
+
+// »óÅÂ°¡ º¯°æµÈ À¯Àú¿¡ ´ëÇÑ slot°ú stats¸¦ Àü´ŞÇÏ±â À§ÇÑ ÇÔ¼ö 
+int broadcastInRoom(int fd, int rid, int stats, int *broadcastfd, struct inRoomStateBroadcast *roomBroad)
+{
+	int i;
+	memset(query, 0x00, sizeof(query));
+
+    // ÇØ´ç ¹æ ¹øÈ£¿¡ ÀÖ´Â À¯ÀúÀÇ ±â·ÏÀ» ºÒ·¯¿Â´Ù
+    snprintf(query, 255, "Select * from RoomList where rid = %d",rid);
+	if (runQuery(query) == -1)
+	{
+		Log("broadcastInRoom failed");
+		return 0;
+	}
+	fetchRow();
+	
+	for(i = 0; i < 4; i++) // broadcast¿ë fd ÀúÀå, º¯°æµÈ À¯ÀúÀÇ »óÅÂ¿Í ½½·ÔÀ» ÀúÀåÇÑ´Ù.
+    {
+        broadcastfd[i] = atoi(sql_row[i+6]);
+		if(fd == broadcastfd[i]) // º¯°æµÈ À¯Àú
+		{
+			roomBroad->slot = i+1; 
+			roomBroad->stats = stats; 
+		}
+    }
+	
+	Log("broadcastInRoom Success!");
 	return 1; // ¼º°øÀûÀ¸·Î ¸¶Ä§
 }
 
