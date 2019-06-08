@@ -36,7 +36,8 @@ int setEpoll(int);
 int connectClient(int, int);
 void closeClient(int, int);
 int login(int, int);
-int lobby(int, int);
+int lobby(int, int, int *);
+int inRoom(int, int, int *);
 int server(char *port);
 
 #endif
