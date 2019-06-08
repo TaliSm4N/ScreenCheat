@@ -17,11 +17,6 @@ u_kill int not null default 0, # kill이 이상하게 등록이 안되어서 변
 u_death int not null default 0 # kill이랑 맞춤
 ); 
 
-유저,방 수 테이블
-
-Create table count ( 
-ucnt int not null default 0,
-rcnt int not null default 0);
 
 방 목록 테이블 – 호스트명, 방 내부 인원 수, 방 번호
 
@@ -38,7 +33,6 @@ guest3fd int default 0 unique, # guest3의 fd, 겹칠 수 없다
 guest4fd int default 0 unique # guest4의 fd, 겹칠 수 없다
 );
 
-insert into count values('0',’0’); <- ‘ ‘ 부분 복사하면 오류나서 ‘는 직접 쳐줘야함
 
 -------------------------------------------여기까지 복사해줘야 오류 안남-----------------------------
 select * from Userinfo # Userinfo 테이블 확인;
@@ -51,6 +45,15 @@ itemCount int not null, # 아이템 수량, 필요 없을 수 있음
 MapitemCount int not null, # 맵에 있는 동일한 아이템 수량, 필요 없을 수 있음
 icode int not null,
 item varchar(10) not null,
+
+
+유저,방 수 테이블
+
+Create table count ( 
+ucnt int not null default 0,
+rcnt int not null default 0);
+
+insert into count values('0',’0’); <- ‘ ‘ 부분 복사하면 오류나서 ‘는 직접 쳐줘야함
 
 Auto_increment 초기화하기
 alter table <테이블 이름> auto_increment=<초기화값>; 
