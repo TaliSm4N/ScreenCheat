@@ -102,6 +102,14 @@ struct lobbyListAuth
 {
 	int msg_code;
 
+	struct room room; // [4] 에서 변경  
+
+};
+//대기실 리스트 승인  버퍼용
+struct lobbyListAuth_2
+{
+	int msg_code;
+
 	struct room room[4];
 
 };
