@@ -76,9 +76,9 @@ struct lobbyMsg
 struct lobbyRequest
 {
 	int msg_code;
-
-	int rid;
+	
 	int uid;
+	int rid;
 };
 
 //대기실 방 개수, write 두 번 쓰기는 아까워서 만듬
@@ -150,9 +150,9 @@ struct inRoomMsg
 struct inRoomRequest
 {
 	int msg_code;
-
-	int stats;
+	
 	int rid;
+	int stats;
 };
 
 //게임 시작 승인
