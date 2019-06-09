@@ -240,7 +240,8 @@ int lobby(int epfd, int fd, int stats[])
 	struct lobbyListAuth lobbyListAuth;
 	struct lobbyListAuth_2 Listbuffer[divrcnt+1]; // 되는지 모름, 방 목록을 담기위한 임시 버퍼, 나중에 struct room이나 char배열로 교체
 	struct user updateUser;
-	struct enterRoomBroadcast enterRoomBroadcast;    LogNum("roomCount",roomCount);
+	struct enterRoomBroadcast enterRoomBroadcast;
+    LogNum("roomCount",roomCount);
 
 	Log("Lobby module");
 	LogNum("fd",fd);
@@ -402,7 +403,7 @@ int inRoom(int epfd, int fd, int stats[])
                         continue;
 					}
 					write(broadcastfd[i],&inRoomStateBroadcast,sizeof(struct inRoomStateBroadcast));
-				}return 1; // eState = 1 으로 대기실 다시 진행
+				}
             break;
 
         case 301: // 게임 시작 요청, 그 방에 있는 모든 유저에게 승인 메시지 전송
