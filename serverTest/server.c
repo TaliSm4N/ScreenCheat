@@ -240,7 +240,8 @@ int lobby(int epfd, int fd, int stats[])
 	struct lobbyListAuth lobbyListAuth;
 	struct lobbyListAuth_2 Listbuffer[divrcnt+1]; // 되는지 모름, 방 목록을 담기위한 임시 버퍼, 나중에 struct room이나 char배열로 교체
 	struct user updateUser;
-	struct enterRoomBroadcast enterRoomBroadcast;    LogNum("roomCount",roomCount);
+	struct enterRoomBroadcast enterRoomBroadcast;
+    LogNum("roomCount",roomCount);
 
 	Log("Lobby module");
 	LogNum("fd",fd);
@@ -303,25 +304,6 @@ int lobby(int epfd, int fd, int stats[])
 			lobbyListAuth.msg_code=212;
 
 			bringRoomList(&Listbuffer, divrcnt, modrcnt);
-            /*
-			for(i = 0; i < divrcnt; i++)
-            { // 방 목록 전송 과정 1
-                memcpy(&lobbyListAuth.room[0], &Listbuffer[i].room[0], sizeof(struct room));
-                memcpy(&lobbyListAuth.room[1], &Listbuffer[i].room[1], sizeof(struct room));
-                memcpy(&lobbyListAuth.room[2], &Listbuffer[i].room[2], sizeof(struct room));
-                memcpy(&lobbyListAuth.room[3], &Listbuffer[i].room[3], sizeof(struct room));
-                write(fd,&lobbyListAuth,sizeof(struct lobbyListAuth)); room[4] 일 때
-			}
-
-			for (i = 0; i < modrcnt; i++) { // 방 목록 전송 과정 2 0~3개 남은 방들을 담아 전송
-			memcpy(&lobbyListAuth.room[i], &Listbuffer[divrcnt].room[i], sizeof(struct room));
-			}
-
-			for (i = modrcnt; i < 4; i++) { // 방 목록 전송 과정 3 안보내는 방들에 -1 을 넣음
-            memset(&lobbyListAuth.room[i], -1, sizeof(struct room);
-			}
-
-			write(fd,&lobbyListAuth,sizeof(struct lobbyListAuth)); */
 
             for(i = 0; i < divrcnt; i++)
             { // 방 목록 전송 과정 1
