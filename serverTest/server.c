@@ -210,7 +210,7 @@ int login(int epfd ,int fd)
 			Log("request change to Lobby");
 			auth.msg_code=112;
 			write(fd,&auth.msg_code,sizeof(int));
-			return 1;
+			return 1; // 대기실 모듈로 전환 
 			break;
 
 		case 500: // 게임 종료 요청, eState를 4로 바꿔야함
@@ -240,8 +240,7 @@ int lobby(int epfd, int fd, int stats[])
 	struct lobbyListAuth lobbyListAuth;
 	struct lobbyListAuth_2 Listbuffer[divrcnt+1]; // 되는지 모름, 방 목록을 담기위한 임시 버퍼, 나중에 struct room이나 char배열로 교체
 	struct user updateUser;
-	struct enterRoomBroadcast enterRoomBroadcast;
-    LogNum("roomCount",roomCount);
+	struct enterRoomBroadcast enterRoomBroadcast;    LogNum("roomCount",roomCount);
 
 	Log("Lobby module");
 	LogNum("fd",fd);
@@ -286,6 +285,7 @@ int lobby(int epfd, int fd, int stats[])
 
 					write(broadcastfd[i],&enterRoomBroadcast,sizeof(struct enterRoomBroadcast));
 				}
+				 // 만약 states 관리가 꼬인다면 return을 하지않고 직접 inRoom 함수를 호출하는 방식으로 진행해야함
 				return 2; // 방(inRoom) 상태로 전환
 			}
 
@@ -442,7 +442,7 @@ int inRoom(int epfd, int fd, int stats[])
 					write(broadcastfd[i],&inRoomStateBroadcast,sizeof(struct inRoomStateBroadcast));
 				}
 
-            return 2; // 로비 모듈로 전환
+            return 1; // 대기실 모듈로 전환
             break;
 
         case 303: // 방장의 방 퇴장 요청
@@ -456,13 +456,13 @@ int inRoom(int epfd, int fd, int stats[])
 				{
 					write(broadcastfd[i],&inRoomStateBroadcast.msg_code,sizeof(int));
 				}
-         // 모든 클라이언트가 304 요청시 return 2 주석 필요
-        //    return 2; // 로비 모듈로 전환
+         // 모든 클라이언트가 304 요청시 return 1 주석 필요
+        //    return 1; // 대기실 모듈로 전환
             break;
 
         case 304: // 방장의 방 퇴장 요청에 따른 클라이언트 들의 대기실 이동
             Log("request return lobby");
-            return 2;
+            return 1; // 대기실 모듈로 전환
             break;
 
         case 500: // 게임 종료 요청, eState를 4로 바꿔야함
@@ -485,7 +485,7 @@ int inRoom(int epfd, int fd, int stats[])
 
 			break;
 	}
-	return 2; // eState = 2 으로 대기실 다시 진행
+	return 2; // eState = 2 으로 방(inRoom) 다시 진행
 }
 
 //server main code
