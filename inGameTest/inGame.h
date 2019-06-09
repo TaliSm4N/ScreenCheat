@@ -19,8 +19,20 @@
 #define EPOLL_SIZE 50
 #define OBJ_CNT 15
 
-struct tcpTheadArgment
+#define MAP_CLNT 400
+#define MAP_SERV 410
+#define USR_CLNT 401
+#define USR_SERV 411
+#define ATK_CLNT 402
+#define ATK_SERV 412
+#define ITEM_CLNT 403
+#define ITEM_SERV 413
+
+struct tcpThreadArg
 {
+//	int epfd;
+	int *player;
+	int pCnt;
 };
 
 void testIngame(int TPCport, int UDPport, int pCnt);//테스트 코드
@@ -30,6 +42,7 @@ void testIngame(int TPCport, int UDPport, int pCnt);//테스트 코드
 int testTCP(int *,int,int);
 int inGameEpoll(int *,int);
 int initGame(int,int *,int);
+void *tcp_thread(void *);
 
 //udp관련
 int setUDP(int port);

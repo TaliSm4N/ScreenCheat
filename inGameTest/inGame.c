@@ -1,24 +1,38 @@
 #include "inGame.h"
+#include <pthread.h>
+
 
 void testIngame(int TCPport, int UDPport,int pCnt)
 {
 	int udp_sock;
 	int epfd;
-	int player[pCnt];//방장은 0번으로 함
+	int player[pCnt];//방장은 0번으로 함a
+
+	struct tcpThreadArg arg;
+
+	pthread_t t_id;
 
 	struct sockaddr_in clnt_adr[pCnt];
 	//tcp연계부분 
 	testTCP(player,pCnt,TCPport);
 
 	initGame(0,player,pCnt);
-
-	epfd=inGameEpoll(player,pCnt);
 	
-
+	Log("make epoll");
+	epfd=inGameEpoll(player,pCnt);
+	Log("make epoll success");
 
 	udp_sock=setUDP(UDPport);
 
 	//tcp를 통해 udp의 소켓 번호 전달(테스트용 생략)
+
+	arg.player=player;
+	arg.pCnt=pCnt;
+
+	if(pthread_create(&t_id,NULL,tcp_thread,&arg)!=0)
+	{
+		error_handling("tcp inGame thread error");
+	}
 
 	connectCheckUDP(udp_sock,clnt_adr,pCnt);
 	playGame(udp_sock,clnt_adr,pCnt);
@@ -77,38 +91,48 @@ int initGame(int hostNum, int *player,int cnt)
 	inGameUser userMsg;
 	//loc obj[OBJ_CNT];
 
+	int size;
+
 	Log("initGame");
+
+	Log("Object position set");
 
 	do
 	{
-		read(player[hostNum],(char *)&mapMsg,sizeof(inGameMap));
+		size = read(player[hostNum],(char *)&mapMsg,sizeof(inGameMap));
+
+
 		LogNum("ID",mapMsg.obj_num);
 		LogLoc(mapMsg.location);
+		LogNum("remain",mapMsg.remainder);
 
 		for(int i=0;i<cnt;i++)
 		{
-			if(i!=hostNum)
-			{
-				mapMsg.msg_code=410;
+	//		if(i!=hostNum)
+	//		{
+				mapMsg.msg_code=MAP_SERV;
 				write(player[i],(char *)&mapMsg,sizeof(inGameMap));
-			}
+	//		}
 		}
 	}while(mapMsg.remainder>1);
 
 	Log("get all map msg");
 
+	Log("User position set");
+
 	do
 	{
 		read(player[hostNum],(char *)&userMsg,sizeof(inGameUser));
 		LogLoc(userMsg.location);
+		LogNum("remain",userMsg.remainder);
 
 		for(int i=0;i<cnt;i++)
 		{
-			if(i!=hostNum)
-			{
-				userMsg.msg_code=411;
+//			if(i!=hostNum)
+//			{
+				userMsg.msg_code=USR_SERV;
 				write(player[i],(char *)&userMsg,sizeof(inGameUser));
-			}
+//			}
 		}
 	}while(userMsg.remainder>1);
 	Log("get all user msg");
@@ -117,8 +141,73 @@ int initGame(int hostNum, int *player,int cnt)
 
 void *tcp_thread(void *arg)
 {
+//	int epfd=((struct tcpThreadArg *)arg)->epfd;
 	int epfd;
-//	int player[]
+	int *player=((struct tcpThreadArg *)arg)->player;
+	int pCnt=((struct tcpThreadArg *)arg)->pCnt;
+
+	inGameMsg msg;
+//	inGameAtk atkMsg;
+	inGameItemSend itemMsg;
+
+	struct epoll_event event;
+	struct epoll_event *ep_events;
+	int event_cnt,i,j;
+
+	epfd=inGameEpoll(player,pCnt);
+	ep_events=malloc(sizeof(struct epoll_event)*EPOLL_SIZE);
+
+	while(1)
+	{
+		event_cnt=epoll_wait(epfd,ep_events,EPOLL_SIZE,-1);
+		if(event_cnt==-1)
+		{
+			Log("epoll_wait error");
+			break;
+		}
+
+		for(i=0;i<event_cnt;i++)
+		{
+			read(ep_events[i].data.fd,(char *)&msg,sizeof(inGameMsg));
+
+			switch(msg.msg_code)
+			{
+				case ATK_CLNT:
+					//attack의 경우 보내는 것과 받는 것이 같음
+					msg.msg_code=ATK_SERV;
+					for(i=0;i<pCnt;i++)
+					{
+						if(player[i]!=ep_events[i].data.fd)
+						{
+							write(player[i],(char *)&msg,sizeof(inGameAtk));
+						}
+					}
+					break;
+				case ITEM_CLNT:
+					itemMsg.msg_code=ITEM_SERV;
+					itemMsg.icode = ((inGameItemRecv *)&msg)->icode;
+
+					for(i=0;i<pCnt;i++)
+					{
+						if(player[i]!=ep_events[i].data.fd)
+						{
+							write(player[i],(char *)&itemMsg,sizeof(inGameItemSend));
+						}
+					}
+					break;
+			}
+/*
+			for(j=0;j<pCnt;j++)
+			{
+				//test 전송 메시지 없는 상태
+				if(player[j]!=ep_events[i].data.fd)
+				{
+					write(player[j],(char *)&msg,sizeof(inGameMsg));
+				}
+			}
+*/
+		}
+	}
 
 	return NULL;
 }
@@ -145,6 +234,8 @@ int setUDP(int port)
 	{
 		error_handling("UDP socket bind failed");
 	}
+
+	Log("UDP setting");
 	
 	return serv_sock;
 }
