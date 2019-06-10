@@ -77,6 +77,18 @@ int inquiryCount(char *cntTable)
 	return cnt;
 }
 
+int inquiryHostfd(int rid)
+{
+    int i;
+    memset(query, 0x00, sizeof(query));
+
+    snprintf(query, 255, "Select hostfd from RoomList where rid = %d",rid);
+	runQuery(query); // 오류 체크용으로 임시로 박아둠
+	fetchRow();
+
+    return atoi(sql_row[0]);
+}
+
 // sid로 유저id를 찾아온다.
 char* convertUid(int uid)
 {
@@ -302,7 +314,7 @@ int enterRoom(int rid, int uid, int fd, int *stats, int *broadcastfd, struct lob
 }
 
 // 상태가 변경된 유저에 대한 slot과 stats를 전달하기 위한 함수
-int broadcastInRoom(int fd, int rid, int stats, int *broadcastfd, struct inRoomStateBroadcast *roomBroad)
+int broadcastInRoom(int fd, int rid, int *broadcastfd, struct inRoomStateBroadcast *roomBroad)
 {
 	int i;
 	memset(query, 0x00, sizeof(query));
@@ -316,13 +328,12 @@ int broadcastInRoom(int fd, int rid, int stats, int *broadcastfd, struct inRoomS
 	}
 	fetchRow();
 
-	for(i = 0; i < 4; i++) // broadcast용 fd 저장, 변경된 유저의 상태와 슬롯을 저장한다.
+	for(i = 0; i < 4; i++) // broadcast용 fd 저장, 변경된 유저의 슬롯을 저장한다.
     {
         broadcastfd[i] = atoi(sql_row[i+6]);
 		if(fd == broadcastfd[i]) // 변경된 유저
 		{
-			roomBroad->slot = i+1;
-			roomBroad->stats = stats;
+			roomBroad->slot = i;
 		}
     }
 
