@@ -64,21 +64,29 @@ struct loginAuth
 #define LOBBY
 
 
-//대기실 클라이언트의 메시지 원형 12byte
+//대기실 클라이언트의 메시지 원형 20byte
 struct lobbyMsg
 {
 	int msg_code;
 
-	char data[8];
+	char data[16];
 };
 
-//대기실 요청 , 방 생성, 접속, 리스트 요청
+//대기실 방 생성, 접속, 리스트 요청
 struct lobbyRequest
 {
 	int msg_code;
-	
+
 	int uid;
 	int rid;
+};
+
+//대기실 방장으로 부터 유저 상태들을 받아옴
+struct lobbyStatsFromHost
+{
+	int msg_code;
+
+	int stats[4];
 };
 
 //대기실 방 개수, write 두 번 쓰기는 아까워서 만듬
@@ -102,7 +110,7 @@ struct lobbyListAuth
 {
 	int msg_code;
 
-	struct room room; // [4] 에서 변경  
+	struct room room; // [4] 에서 변경
 
 };
 //대기실 리스트 승인  버퍼용
@@ -119,9 +127,9 @@ struct lobbyEnterAuth
 {
 	int msg_code;
 
-	int slot;
+	int slot; // 입장할 유저의 슬롯
 	int ucnt;
-    struct user user[3];
+    struct user user[3]; // 다른 유저의 정보
 
 };
 
@@ -143,16 +151,15 @@ struct inRoomMsg
 {
 	int msg_code;
 
-	char data[8];
+	char data[4];
 };
 
 //방 요청 , 상태 변경, 게임 시작, 방 퇴장 요청
 struct inRoomRequest
 {
 	int msg_code;
-	
+
 	int rid;
-	int stats;
 };
 
 //게임 시작 승인
