@@ -6,6 +6,7 @@ int     connectDB(void);
 void    closeDB(void);
 
 int 	inquiryCount(char *); // 유저, 방 수 조회
+int		inquiryHostfd(int); // 호스트의 fd를 가져옴
 char*   convertUid(int); // uid를 통해 user id를 얻어온다
 void	bringUserinfo(int, struct user *); // uid에 맞는 유저의 정보를 가져옴
 
@@ -19,7 +20,7 @@ void	bringRoomList(struct lobbyListAuth_2 *[],int, int); // 방 목록을 가져온다, 
 int 	enterRoom(int, int, int, int*, int *, struct lobbyEnterAuth *); // 방 접속
 
 // 방
-int		broadcastInRoom(int ,int, int, int*, struct inRoomStateBroadcast *); // 브로드캐스팅
+int		broadcastInRoom(int ,int, int*, struct inRoomStateBroadcast *); // 브로드캐스팅
 void	deleteRoom(int); // 방 삭제시 list에서 제외한다.
 
 // 인게임
