@@ -27,6 +27,7 @@
 #define ATK_SERV 412
 #define ITEM_CLNT 403
 #define ITEM_SERV 413
+#define UDPCHECK  414
 
 struct tcpThreadArg
 {
@@ -46,7 +47,7 @@ void *tcp_thread(void *);
 
 //udp관련
 int setUDP(int port);
-int connectCheckUDP(int sock,struct sockaddr_in *clnt_adr,int cnt);
+int connectCheckUDP(int sock,int *player,struct sockaddr_in *clnt_adr,int cnt);
 int playGame(int sock,struct sockaddr_in *clnt_adr,int cnt);
 
 #endif

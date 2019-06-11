@@ -34,7 +34,7 @@ void testIngame(int TCPport, int UDPport,int pCnt)
 		error_handling("tcp inGame thread error");
 	}
 
-	connectCheckUDP(udp_sock,clnt_adr,pCnt);
+	connectCheckUDP(udp_sock,player,clnt_adr,pCnt);
 	playGame(udp_sock,clnt_adr,pCnt);
 
 }
@@ -114,7 +114,7 @@ int initGame(int hostNum, int *player,int cnt)
 				write(player[i],(char *)&mapMsg,sizeof(inGameMap));
 	//		}
 		}
-	}while(mapMsg.remainder>1);
+	}while(mapMsg.remainder>=1);
 
 	Log("get all map msg");
 
@@ -134,7 +134,7 @@ int initGame(int hostNum, int *player,int cnt)
 				write(player[i],(char *)&userMsg,sizeof(inGameUser));
 //			}
 		}
-	}while(userMsg.remainder>1);
+	}while(userMsg.remainder>=1);
 	Log("get all user msg");
 
 }
@@ -181,7 +181,12 @@ void *tcp_thread(void *arg)
 						{
 							write(player[i],(char *)&msg,sizeof(inGameAtk));
 						}
+						else
+						{
+							LogNum("attack",player[i]);
+						}
 					}
+					LogNum("target",((inGameAtk *)&msg)->tid);
 					break;
 				case ITEM_CLNT:
 					itemMsg.msg_code=ITEM_SERV;
@@ -240,29 +245,45 @@ int setUDP(int port)
 	return serv_sock;
 }
 
-int connectCheckUDP(int sock,struct sockaddr_in *clnt_adr,int cnt)
+int connectCheckUDP(int sock,int *player,struct sockaddr_in *clnt_adr,int cnt)
 {
+	int str_len;
+	//inGameMsg checkMsg;
+	inGameUDPCheck checkMsg;
 	udpMsg msg;
 
 	socklen_t clnt_adr_sz;
 
+	checkMsg.msg_code=UDPCHECK;
+
 	srand(time(NULL));
+
+	Log("wait UDP msg");
 
 	for(int i=0;i<cnt;i++)
 	{
+		checkMsg.id=-1;
+		str_len=write(player[i],(char *)&checkMsg,sizeof(inGameUDPCheck));
+		LogNum("msg_code",checkMsg.msg_code);
+		LogNum("id",checkMsg.id);
+		LogNum("waiting",str_len);
 		clnt_adr_sz=sizeof(clnt_adr[i]);
 		recvfrom(sock,(char *)&msg,sizeof(udpMsg),0,
 				(struct sockaddr*)&(clnt_adr[i]),&clnt_adr_sz);
+		LogNum("get UDP msg",i);
 
-		msg.id = i;
-		msg.pos.x=(float)(rand()%51-25);
-		msg.pos.z=(float)(rand()%51-25);
-		msg.pos.y=1.0;
+		//msg.id = i;
+		//msg.pos.x=(float)(rand()%51-25);
+		//msg.pos.z=(float)(rand()%51-25);
+		//msg.pos.y=1.0;
 
 		LogUDPMsg(msg);
-
-		sendto(sock,(char*)&msg,sizeof(udpMsg),0,(struct sockaddr *)&(clnt_adr[i]),clnt_adr_sz);
+		checkMsg.id=i;
+		write(player[i],(char *)&checkMsg,sizeof(inGameUDPCheck));
+//		sendto(sock,(char*)&msg,sizeof(udpMsg),0,(struct sockaddr *)&(clnt_adr[i]),clnt_adr_sz);
 	}
+
+	Log("Get all UDP");
 
 	return TRUE;
 }
@@ -288,11 +309,11 @@ int playGame(int sock,struct sockaddr_in *clnt_adr,int cnt)
 
 		for(i=0;i<cnt;i++)
 		{
-			if(i!=msg.id)
-			{
+	//		if(i!=msg.id)
+	//		{
 				sendto(sock,(char *)&msg,sizeof(udpMsg),0,
 						(struct sockaddr*)&(clnt_adr[i]),clnt_adr_sz);
-			}
+	//		}
 		}
 	}
 

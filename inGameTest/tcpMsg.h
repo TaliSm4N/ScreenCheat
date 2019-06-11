@@ -53,6 +53,13 @@ typedef struct inGameItemSend
 	char padding[16];
 }inGameItemSend;
 
+typedef struct inGameUDPCheck
+{
+	int msg_code;
+	int id;
+	char padding[16];
+}inGameUDPCheck;
+
 #endif
 
 
