@@ -101,7 +101,7 @@ int setEpoll(int sock)
 	Log("epoll setting");
 
 	//socket setting
-	setnonblockingmode(sock); // 비동기화
+	setnonblockingmode(sock); // 비동기화lobbyCreateAuth.msg_code=210
 	event.events = EPOLLIN;
 	eData->fd=sock;
 	eData->state=0;
@@ -210,7 +210,7 @@ int login(int epfd ,int fd)
 			Log("request change to Lobby");
 			auth.msg_code=112;
 			write(fd,&auth.msg_code,sizeof(int));
-			return 1; // 대기실 모듈로 전환 
+			return 1; // 대기실 모듈로 전환
 			break;
 
 		case 500: // 게임 종료 요청, eState를 4로 바꿔야함
@@ -224,6 +224,7 @@ int login(int epfd ,int fd)
 	return 0; // eState = 0 으로 로그인 다시 진행
 }
 
+//lobby module msg처리
 int lobby(int epfd, int fd, int stats[])
 {
     int str_len;
@@ -233,7 +234,7 @@ int lobby(int epfd, int fd, int stats[])
 	int broadcastfd[4] = {0}; // broadcast용 fd
 	int enterRid, enterUid; // 입장할 때 임시로 저장해 놓기위한 변수
 	int hostfd; // 방장의 fd
-	
+
 	struct lobbyMsg lobbyMsg;
 	struct lobbyRequest *request;
 	struct lobbyStatsFromHost *StatsFromHost;
@@ -261,35 +262,50 @@ int lobby(int epfd, int fd, int stats[])
 			lobbyCreateAuth.msg_code=210;
 			createRoom(request->uid, fd, &lobbyCreateAuth, roomCount);
 			write(fd,&lobbyCreateAuth,sizeof(struct lobbyCreateAuth));
-			stats[0] = 0; // 방 생성후 상태 변경 
+
+			stats[0] = 0; // 방 생성후 상태 변경
             // 만약 states 관리가 꼬인다면 return을 하지않고 직접 inRoom 함수를 호출하는 방식으로 진행해야함
 			return 2; // 방(inRoom) 상태로 전환
 			break;
 
 		case 201: // 방 접속 요청 , 방 번호를 전달 받으면 해당 방에 접속, 해당 방을 갱신한다.
 			Log("request RoomEnter");
-			request=(struct lobbyRequest *)&lobbyMsg; 
-			
+			request=(struct lobbyRequest *)&lobbyMsg;
+
 			//호스트로부터 먼저 stats를 요청하는 과정
 			hostfd = inquiryHostfd(request->rid); // 호스트의 fd를 가져옴
+		
+			LogNum("hostfd", hostfd);
+			
 			lobbyEnterAuth.msg_code = 215;
 			write(hostfd, &lobbyEnterAuth.msg_code, sizeof(int)); // 호스트에게 stats 달라고 요청
-			if(lobbyMsg.msg_code == 204) { // 204 메시지 코드일때만 받아와야 한다
-			read(hostfd, &lobbyMsg,sizeof(struct lobbyMsg)); // 호스트로부터 stats 받아옴
-			StatsFromHost = (struct lobbyStatsFromHost *)&lobbyMsg; 
-			memcpy(stats, StatsFromHost->stats, sizeof(StatsFromHost->stats)); // stats 복사 
+			read(hostfd, &lobbyMsg,sizeof(struct lobbyMsg)); // 호스트로부터 메시지 받아옴
+			LogNum("Host message code", lobbyMsg.msg_code); // 어떤 메세지코드를 받는지 검사
+			if(lobbyMsg.msg_code == 204) { // 204 메시지 코드일때만 수행되어야 함
+			StatsFromHost = (struct lobbyStatsFromHost *)&lobbyMsg;
+			memcpy(stats, StatsFromHost->stats, sizeof(StatsFromHost->stats)); // stats 복사
+			printf("stats: %d %d %d %d \n", stats[0], stats[1], stats[2], stats[3]);
 			}
-			// stats 과정 종료 
-		
+			else { // 호스트의 메세지코드가 이상할 경우 임시로 방 접속 실패 처리로 해둠
+				Log("client enter room failed");
+				lobbyEnterAuth.msg_code=214;
+				write(fd,&lobbyEnterAuth.msg_code,sizeof(int));
+				LogNum("fd", fd);
+			}
+			// stats 과정 종료
+
 			if (enterRoom(request->rid, request->uid, fd, stats, broadcastfd, &lobbyEnterAuth)) // rid가 존재하지 않을경우 실패
 			{
 				lobbyEnterAuth.msg_code=211;
 				write(fd,&lobbyEnterAuth,sizeof(struct lobbyEnterAuth));
-				
+
 				enterRoomBroadcast.msg_code=321;
 				bringUserinfo(request->uid, &updateUser); // profile 가져옴
+				
 				memcpy(&enterRoomBroadcast.user, &updateUser, sizeof(updateUser)); // profile 담음
+				printf("enterUser id : %s, win: %d, lose: %d \n", enterRoomBroadcast.user.id, enterRoomBroadcast.user.win, enterRoomBroadcast.user.lose);
 				enterRoomBroadcast.user.slot = lobbyEnterAuth.slot; // 입장할 유저가 몇번 슬롯에 갈지 받아옴
+				LogNum("enterUser slot", enterRoomBroadcast.user.slot);
 				enterRoomBroadcast.user.stats = 0; // 입장 했으므로 0
 
 				for(i = 0; i < 4; i++) // guest들에게 들어온 유저에 대한 정보를 전달
@@ -298,6 +314,8 @@ int lobby(int epfd, int fd, int stats[])
 						continue;
 
 					write(broadcastfd[i],&enterRoomBroadcast,sizeof(struct enterRoomBroadcast));
+					printf("broadcastfd[%d] = %d\n", i, broadcastfd[i]);
+					
 				}
 				 // 만약 states 관리가 꼬인다면 return을 하지않고 직접 inRoom 함수를 호출하는 방식으로 진행해야함
 				return 2; // 방(inRoom) 상태로 전환
@@ -305,8 +323,10 @@ int lobby(int epfd, int fd, int stats[])
 
 			else // 방 접속 실패
 			{
+				Log("client enter room failed");
 				lobbyEnterAuth.msg_code=214;
 				write(fd,&lobbyEnterAuth.msg_code,sizeof(int));
+				LogNum("fd", fd);
 			}
 
 			break;
@@ -316,8 +336,8 @@ int lobby(int epfd, int fd, int stats[])
 
 			lobbyListAuth.msg_code=212;
 
-			bringRoomList(&Listbuffer, divrcnt, modrcnt);
-            
+			bringRoomList(Listbuffer, divrcnt, modrcnt);
+
             for(i = 0; i < divrcnt; i++)
             { // 방 목록 전송 과정 1
                 memcpy(&lobbyListAuth.room, &Listbuffer[i].room[0], sizeof(struct room));
@@ -375,9 +395,9 @@ int inRoom(int epfd, int fd, int stats[])
 	LogNum("fd",fd);
 
     str_len=read(fd,&inRoomMsg,sizeof(struct inRoomMsg)); // 로그인 단계 메시지를 받음
-	
+
     request=(struct inRoomRequest *)&inRoomMsg;
-	
+
 	switch(inRoomMsg.msg_code)
 	{
         case 300: // 상태 변경 요청
@@ -406,7 +426,9 @@ int inRoom(int epfd, int fd, int stats[])
                         continue;
 					}
 					write(broadcastfd[i],&inRoomStateBroadcast,sizeof(struct inRoomStateBroadcast));
+					printf("broadcastfd[%d] = %d\n", i, broadcastfd[i]);
 				}
+			LogNum("changedUser stats", inRoomStateBroadcast.stats);
             break;
 
         case 301: // 게임 시작 요청, 그 방에 있는 모든 유저에게 승인 메시지 전송
@@ -414,17 +436,18 @@ int inRoom(int epfd, int fd, int stats[])
             inRoomStartAuth.msg_code=311;
             // fd를 받아오기 위함 , broadcastfd와 rid 말곤 필요없는 정보, temp는 그냥 형식상 넘김
             broadcastInRoom(fd, request->rid, broadcastfd, &temp);
-
+			
             for(i = 0; i < 4; i++) // 모두에게 311번(게임이 시작) 코드 전달
 				{
 					write(broadcastfd[i],&inRoomStartAuth.msg_code,sizeof(int));
+					printf("broadcastfd[%d] = %d\n", i, broadcastfd[i]);
 				}
             /*
             inRoomStartAuth 에 포트 넘버 넘기는 과정 필요
 
             여기서 broadcastfd[i] 들을 전부 epoll 해제 시키고 넘겨주는 과정이 필요하다
             epoll_ctl(epfd, EPOLL_CTL_DEL, broadcastfd[i], NULL); // epoll 관리 대상에서 제외
-			
+
 			게임 종류 이후 방으로 복귀할 경우 stats[i] = 0;(존재하는 클라것만)
             */
             return 3; // 인게임 모듈로 전환
@@ -446,28 +469,30 @@ int inRoom(int epfd, int fd, int stats[])
 					    continue;
 					}
 					write(broadcastfd[i],&inRoomStateBroadcast,sizeof(struct inRoomStateBroadcast));
+					printf("broadcastfd[%d] = %d\n", i, broadcastfd[i]);
 				}
-
+			LogNum("ExitedUser slot", inRoomStateBroadcast.slot);
             return 1; // 대기실 모듈로 전환
             break;
 
         case 303: // 방장의 방 퇴장 요청
             Log("request Delete Room");
             inRoomStateBroadcast.msg_code=313;
-			
+
             broadcastInRoom(fd, request->rid, broadcastfd, &inRoomStateBroadcast);
 
             for(i = 0; i < 4; i++) // 모든 유저들에게 변경된 상태를 전달
 				{
 					if(broadcastfd[i] == 0) // 없는 유저는 그냥 넘어감
 						continue;
-					
-					stats[i] = -1; // 모두 나갔으므로 전부 -1로 초기화 
+
+					stats[i] = -1; // 모두 나갔으므로 전부 -1로 초기화
 					write(broadcastfd[i],&inRoomStateBroadcast.msg_code,sizeof(int));
+					printf("broadcastfd[%d] = %d\n", i, broadcastfd[i]);
 				}
-				
+
 			deleteRoom(request->rid); // 방을 삭제한다
-     
+
             break;
 
         case 304: // 방장의 방 퇴장 요청에 따른 클라이언트 들의 대기실 이동
@@ -491,6 +516,7 @@ int inRoom(int epfd, int fd, int stats[])
 					    continue;
 					}
 					write(broadcastfd[i],&inRoomStateBroadcast,sizeof(struct inRoomStateBroadcast));
+					printf("broadcastfd[%d] = %d\n", i, broadcastfd[i]);
 				}
 			return 4;
 
