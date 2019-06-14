@@ -16,7 +16,7 @@ int		compareID(char *, char *,struct profile *,int *);// ID, PWD를 비교한다. TRU
 
 // 대기실
 void	createRoom(int, int, struct lobbyCreateAuth *, int); // 방 생성시 list에 추가(방 번호, 호스트 이름,호스트 fd)
-void	bringRoomList(struct lobbyListAuth_2 *[],int, int); // 방 목록을 가져온다, 방 수를 리턴
+void	bringRoomList(struct lobbyListAuth_2 *,int, int); // 방 목록을 가져온다, 방 수를 리턴
 int 	enterRoom(int, int, int, int*, int *, struct lobbyEnterAuth *); // 방 접속
 
 // 방
