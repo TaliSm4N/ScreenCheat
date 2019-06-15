@@ -269,8 +269,7 @@ int lobby(int epfd, int fd, int stats[])
 
 	Log("Lobby module");
 	LogNum("fd",fd);
-	//sigPipe_handler(epfd,fd);
-
+	
 	str_len=read(fd,&lobbyMsg,sizeof(struct lobbyMsg)); // 로그인 단계 메시지를 받음
 
 	switch(lobbyMsg.msg_code)
@@ -359,7 +358,6 @@ int lobby(int epfd, int fd, int stats[])
 			
 			bringRoomList(Listbuffer, divrcnt, modrcnt);
 			
-			vec[1+tempI].iov_base = lobbyListAuth.room;
 			for(i = 0; i < divrcnt; i++)
             { // 방 목록 전송 과정 1
 				tempI = i*4;
@@ -376,7 +374,7 @@ int lobby(int epfd, int fd, int stats[])
 			}
 			
 			write(fd,&lobbyListAuth.msg_code,sizeof(int));
-			write(fd, room, sizeof(room);
+			write(fd, room, sizeof(room));
 			break;
 
 		case 203: // 방 개수 요청, lobby 전환시 클라이언트가 자동으로 신청함
