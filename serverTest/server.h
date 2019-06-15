@@ -27,10 +27,11 @@ typedef struct eventData
 	// 추가할 거 있으면 필요할 때 추가
 }eventData;
 
-void sigInt_handler(void);
-//void sigPipe_handler(int, int);
-void sigintIgnore(int);
-void setnonblockingmode(int);
+void sigInt_handler(void); //SIGINT 처리
+void sigPipe_handler(void); //SIGPIPE 처리, 종료되는 시그널이 발생한 경우 클라이언트의 소켓을 회수하고, epoll을 해제한다
+void sigintIgnore(int); //SIGINT 발생시 Log를 남기고 무시함
+void sigPipeIgnore(int); //SIGPIPE 발생시 소켓과 epoll을 해제하도록 전역변수의 값을 변경함
+void setnonblockingmode(int); //비동기 소켓으로 바꿈
 int setListening(char *);
 int setEpoll(int);
 int connectClient(int, int);
