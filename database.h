@@ -9,6 +9,7 @@ int 	inquiryCount(char *); // 유저, 방 수 조회
 int		inquiryHostfd(int); // 호스트의 fd를 가져옴
 char*   convertUid(int); // uid를 통해 user id를 얻어온다
 void	bringUserinfo(int, struct user *); // uid에 맞는 유저의 정보를 가져옴
+int     checkRoomid(void); // rid가 중간에 빈게 있는지 체크한다.
 
 // 로그인
 int 	joinMembership(char *, char *); //유저 회원가입을 시킴, uid는 1씩 추가된다
