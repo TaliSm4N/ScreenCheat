@@ -1,11 +1,14 @@
 #include "server.h"
 
+int SIGINTCount = 0; // sigint 발생시 처리하기 위해 만든 전역변수
+int sigPipeCount = 0; // sigpipe 발생시 처리하기 위해 만든 전역변수
+
 //SIGINT 처리
 void sigInt_handler (void)
 {
+    Log("sigInt_handler ");
 	struct sigaction act_ignore;
 	memset(&act_ignore, 0x00, sizeof(struct sigaction));
-
 
 	act_ignore.sa_handler = sigintIgnore;
 	sigemptyset(&(act_ignore.sa_mask));
@@ -15,29 +18,34 @@ void sigInt_handler (void)
 
 }
 
-/* 안되서 주석처리 나중에 다시 생각해보기로 한다.
 //SIGPIPE 처리, 종료되는 시그널이 발생한 경우 클라이언트의 소켓을 회수하고, epoll을 해제한다
-void sigPipe_handler(int epfd, int fd)
+void sigPipe_handler(void)
 {
 	struct sigaction act_ignore2;
 	memset(&act_ignore2, 0x00, sizeof(struct sigaction));
 
-	//Log("SIGPIPE has occured!");
-	act_ignore2.sa_handler = closeClient(epfd, fd);
-//SIG_IGN;
+	act_ignore2.sa_handler = sigPipeIgnore;
+
 	sigemptyset(&(act_ignore2.sa_mask));
 	act_ignore2.sa_flags = 0;
 
 	sigaction(SIGPIPE, &act_ignore2, NULL);
 
-} */
+}
 
+// SIGINT 발생시 무시한다
 void sigintIgnore(int signo)
 {
 	Log("sigintIgnored");
+	SIGINTCount = 1;
 }
 
-
+// 시그파이프를 발생시킨 소켓을 종료시킨다
+void sigPipeIgnore(int signo)
+{
+	Log("sigPipeIgnored");
+	sigPipeCount = 1;
+}
 // 비동기 소켓으로 설정
 void setnonblockingmode(int fd)
 {
@@ -142,6 +150,7 @@ int connectClient(int sock,int epfd)
 
 	return clnt_sock;
 }
+
 //클라이언트 소켓을 닫고 epoll을 해제한다, SIGINT 발생 시에도 동일하게 처리
 void closeClient(int epfd,int fd)
 {
@@ -152,7 +161,13 @@ void closeClient(int epfd,int fd)
 
 //login module msg처리
 int login(int epfd ,int fd)
-{
+{	
+	if (sigPipeCount == 1) { //SIGPIPE 발생시
+		Log("SIGPIPE occured");
+		sigPipeCount = 0;
+		closeClient(epfd, fd);
+	}
+	
 	int str_len;
 	struct loginMsg loginMsg;
 	struct loginRequest *request;
@@ -160,7 +175,6 @@ int login(int epfd ,int fd)
 
 	Log("Login module");
 	LogNum("fd",fd);
-	//sigPipe_handler(epfd,fd);
 
 	str_len=read(fd,&loginMsg,sizeof(struct loginMsg)); // 로그인 단계 메시지를 받음
 
@@ -227,14 +241,20 @@ int login(int epfd ,int fd)
 //lobby module msg처리
 int lobby(int epfd, int fd, int stats[])
 {
+	if (sigPipeCount == 1) { //SIGPIPE 발생시
+		Log("SIGPIPE occured");
+		sigPipeCount = 0;
+		closeClient(epfd, fd);
+	}
+	
     int str_len;
-	int i, divrcnt, modrcnt;
+	int i, tempI, divrcnt, modrcnt;
 	int roomCount = inquiryCount("RoomList"); // 전체 방 수
     divrcnt = roomCount/4; modrcnt = roomCount%4; // 방 목록을 가져오기 위해 설정한 변수
 	int broadcastfd[4] = {0}; // broadcast용 fd
 	int enterRid, enterUid; // 입장할 때 임시로 저장해 놓기위한 변수
 	int hostfd; // 방장의 fd
-
+	
 	struct lobbyMsg lobbyMsg;
 	struct lobbyRequest *request;
 	struct lobbyStatsFromHost *StatsFromHost;
@@ -242,7 +262,8 @@ int lobby(int epfd, int fd, int stats[])
 	struct lobbyCreateAuth lobbyCreateAuth;
 	struct lobbyEnterAuth lobbyEnterAuth;
 	struct lobbyListAuth lobbyListAuth;
-	struct lobbyListAuth_2 Listbuffer[divrcnt+1]; // 되는지 모름, 방 목록을 담기위한 임시 버퍼, 나중에 struct room이나 char배열로 교체
+	struct lobbyListAuth_2 Listbuffer[divrcnt+1]; //방 목록을 담기위한 임시 버퍼, 나중에 struct room으로 교체하거나 내비둠
+	struct room room[roomCount]; // 두방에 보내기 위해서 만듬
 	struct user updateUser;
 	struct enterRoomBroadcast enterRoomBroadcast;    LogNum("roomCount",roomCount);
 
@@ -274,9 +295,9 @@ int lobby(int epfd, int fd, int stats[])
 
 			//호스트로부터 먼저 stats를 요청하는 과정
 			hostfd = inquiryHostfd(request->rid); // 호스트의 fd를 가져옴
-		
+
 			LogNum("hostfd", hostfd);
-			
+
 			lobbyEnterAuth.msg_code = 215;
 			write(hostfd, &lobbyEnterAuth.msg_code, sizeof(int)); // 호스트에게 stats 달라고 요청
 			read(hostfd, &lobbyMsg,sizeof(struct lobbyMsg)); // 호스트로부터 메시지 받아옴
@@ -297,11 +318,11 @@ int lobby(int epfd, int fd, int stats[])
 			if (enterRoom(request->rid, request->uid, fd, stats, broadcastfd, &lobbyEnterAuth)) // rid가 존재하지 않을경우 실패
 			{
 				lobbyEnterAuth.msg_code=211;
-				write(fd,&lobbyEnterAuth,sizeof(struct lobbyEnterAuth));
-
+				write(fd,&lobbyEnterAuth,sizeof(struct lobbyEnterAuth)); // 다른 유저들의 정보, 자기 슬롯, 방의 유저 수 전달
+                LogNum("enterUser slot(lobbyEnterAuth)", lobbyEnterAuth.slot);
 				enterRoomBroadcast.msg_code=321;
 				bringUserinfo(request->uid, &updateUser); // profile 가져옴
-				
+
 				memcpy(&enterRoomBroadcast.user, &updateUser, sizeof(updateUser)); // profile 담음
 				printf("enterUser id : %s, win: %d, lose: %d \n", enterRoomBroadcast.user.id, enterRoomBroadcast.user.win, enterRoomBroadcast.user.lose);
 				enterRoomBroadcast.user.slot = lobbyEnterAuth.slot; // 입장할 유저가 몇번 슬롯에 갈지 받아옴
@@ -315,7 +336,7 @@ int lobby(int epfd, int fd, int stats[])
 
 					write(broadcastfd[i],&enterRoomBroadcast,sizeof(struct enterRoomBroadcast));
 					printf("broadcastfd[%d] = %d\n", i, broadcastfd[i]);
-					
+
 				}
 				 // 만약 states 관리가 꼬인다면 return을 하지않고 직접 inRoom 함수를 호출하는 방식으로 진행해야함
 				return 2; // 방(inRoom) 상태로 전환
@@ -335,30 +356,27 @@ int lobby(int epfd, int fd, int stats[])
 			Log("request RoomList");
 
 			lobbyListAuth.msg_code=212;
-
+			
 			bringRoomList(Listbuffer, divrcnt, modrcnt);
-
-            for(i = 0; i < divrcnt; i++)
+			
+			vec[1+tempI].iov_base = lobbyListAuth.room;
+			for(i = 0; i < divrcnt; i++)
             { // 방 목록 전송 과정 1
-                memcpy(&lobbyListAuth.room, &Listbuffer[i].room[0], sizeof(struct room));
-                write(fd,&lobbyListAuth,sizeof(struct lobbyListAuth));
-
-                memcpy(&lobbyListAuth.room, &Listbuffer[i].room[1], sizeof(struct room));
-                write(fd,&lobbyListAuth,sizeof(struct lobbyListAuth));
-
-                memcpy(&lobbyListAuth.room, &Listbuffer[i].room[2], sizeof(struct room));
-                write(fd,&lobbyListAuth,sizeof(struct lobbyListAuth));
-
-                memcpy(&lobbyListAuth.room, &Listbuffer[i].room[3], sizeof(struct room));
-                write(fd,&lobbyListAuth,sizeof(struct lobbyListAuth));
+				tempI = i*4;
+		
+                memcpy(&room[0+tempI], &Listbuffer[i].room[0], sizeof(struct room));
+                memcpy(&room[1+tempI], &Listbuffer[i].room[1], sizeof(struct room));
+                memcpy(&room[2+tempI], &Listbuffer[i].room[2], sizeof(struct room));
+                memcpy(&room[3+tempI], &Listbuffer[i].room[3], sizeof(struct room));
 			}
 
             for (i = 0; i < modrcnt; i++)
             { // 방 목록 전송 과정 2 0~3개 남은 방들을 담아 전송
-			memcpy(&lobbyListAuth.room, &Listbuffer[divrcnt].room[i], sizeof(struct room));
-			write(fd,&lobbyListAuth,sizeof(struct lobbyListAuth));
+			memcpy(&room[(divrcnt*4)+i], &Listbuffer[divrcnt].room[i], sizeof(struct room));
 			}
-
+			
+			write(fd,&lobbyListAuth.msg_code,sizeof(int));
+			write(fd, room, sizeof(room);
 			break;
 
 		case 203: // 방 개수 요청, lobby 전환시 클라이언트가 자동으로 신청함
@@ -381,6 +399,12 @@ int lobby(int epfd, int fd, int stats[])
 
 int inRoom(int epfd, int fd, int stats[])
 {
+	if (sigPipeCount == 1) { //SIGPIPE 발생시
+		Log("SIGPIPE occured");
+		sigPipeCount = 0;
+		closeClient(epfd, fd);
+	}
+
     int str_len;
     int i;
     int broadcastfd[4] = {0}; // broadcast용 fd
@@ -436,7 +460,7 @@ int inRoom(int epfd, int fd, int stats[])
             inRoomStartAuth.msg_code=311;
             // fd를 받아오기 위함 , broadcastfd와 rid 말곤 필요없는 정보, temp는 그냥 형식상 넘김
             broadcastInRoom(fd, request->rid, broadcastfd, &temp);
-			
+
             for(i = 0; i < 4; i++) // 모두에게 311번(게임이 시작) 코드 전달
 				{
 					write(broadcastfd[i],&inRoomStartAuth.msg_code,sizeof(int));
@@ -536,7 +560,8 @@ int server(char *port)
 	int event_cnt;
 	struct epoll_event	*ep_events=(struct epoll_event *)malloc(sizeof(struct epoll_event)*EPOLL_SIZE);
 
-	void sigInt_handler();
+	sigInt_handler();
+    sigPipe_handler();
 
 	sock=setListening(port);//3
 	epfd=setEpoll(sock);//4
@@ -548,6 +573,11 @@ int server(char *port)
 		event_cnt=epoll_wait(epfd,ep_events,EPOLL_SIZE,-1);
 		if(event_cnt == -1)
 		{
+		    if (SIGINTCount == 1) // SIGINT가 발생한 상황
+            {
+                SIGINTCount = 0;
+                continue;
+            }
 			Log("epoll_wait error");
 			break;
 		}
