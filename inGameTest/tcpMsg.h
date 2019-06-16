@@ -60,6 +60,21 @@ typedef struct inGameUDPCheck
 	char padding[16];
 }inGameUDPCheck;
 
+typedef struct inGameRespawn
+{
+	int msg_code;
+	int id;
+	loc location;
+	char padding[4];
+}inGameRespawn;
+
+typedef struct inGameEnd
+{
+	int msg_code;
+	int winner;
+	char padding[16];
+}inGameEnd;
+
 #endif
 
 

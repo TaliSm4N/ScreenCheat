@@ -9,10 +9,13 @@
 #include <sys/socket.h>
 #include <sys/epoll.h>
 #include <pthread.h>
+#include <fcntl.h>
+#include <errno.h>
 #include "udpMsg.h"
 #include "tcpMsg.h"
 #include "myBoolean.h"
 #include "log.h"
+#include "info.h"
 
 #include <time.h>
 
@@ -28,6 +31,11 @@
 #define ITEM_CLNT 403
 #define ITEM_SERV 413
 #define UDPCHECK  414
+#define END_CLNT 405
+#define END_SERV 416
+
+#define RESPAWN_CLNT 404
+#define RESPAWN_SERV 415
 
 struct tcpThreadArg
 {
@@ -44,10 +52,12 @@ int testTCP(int *,int,int);
 int inGameEpoll(int *,int);
 int initGame(int,int *,int);
 void *tcp_thread(void *);
+void tcpMsgSend(int *fd,int pCnt,inGameMsg *msg,int send);
 
 //udp관련
 int setUDP(int port);
 int connectCheckUDP(int sock,int *player,struct sockaddr_in *clnt_adr,int cnt);
 int playGame(int sock,struct sockaddr_in *clnt_adr,int cnt);
+void resultWrite(struct gameInfo *,int);
 
 #endif

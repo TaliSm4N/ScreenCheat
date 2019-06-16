@@ -73,11 +73,15 @@ int inGameEpoll(int *player,int cnt)
 	int epfd;
 	struct epoll_event event;
 
+	int flag;
+
 	epfd=epoll_create(EPOLL_SIZE);
 	
 	for(int i=0;i<cnt;i++)
 	{	
-		event.events=EPOLLIN;
+		flag=fcntl(player[i],F_GETFL,0);
+		fcntl(player[i],F_SETFL,flag|O_NONBLOCK);
+		event.events=EPOLLIN|EPOLLET;
 		event.data.fd=player[i];
 		epoll_ctl(epfd,EPOLL_CTL_ADD,player[i],&event);
 	}
@@ -145,6 +149,7 @@ void *tcp_thread(void *arg)
 	int epfd;
 	int *player=((struct tcpThreadArg *)arg)->player;
 	int pCnt=((struct tcpThreadArg *)arg)->pCnt;
+	struct gameInfo info[4];
 
 	inGameMsg msg;
 //	inGameAtk atkMsg;
@@ -154,8 +159,20 @@ void *tcp_thread(void *arg)
 	struct epoll_event *ep_events;
 	int event_cnt,i,j;
 
+	int str_len;
+
+	//info 초기화
+	for(int i=0;i<pCnt;i++)
+	{
+		info[i].kill=0;
+		info[i].death=0;
+		info[i].win=0;
+	}
+
 	epfd=inGameEpoll(player,pCnt);
 	ep_events=malloc(sizeof(struct epoll_event)*EPOLL_SIZE);
+
+	Log("tcp Thread start");
 
 	while(1)
 	{
@@ -168,53 +185,100 @@ void *tcp_thread(void *arg)
 
 		for(i=0;i<event_cnt;i++)
 		{
-			read(ep_events[i].data.fd,(char *)&msg,sizeof(inGameMsg));
-
+//			while(1)
+//			{
+				str_len=read(ep_events[i].data.fd,(char *)&msg,sizeof(inGameMsg));
+				
+				//제대로 동작 안하면 삭제
+//				if(str_len<0)
+//				{
+//					if(errno==EAGAIN)
+//						break;
+//				}
+//			}
+			Log("--------------------");
+			LogNum("sender",ep_events[i].data.fd);
+			LogNum("msg_code",msg.msg_code);
+			Log("--------------------");
 			switch(msg.msg_code)
 			{
 				case ATK_CLNT:
 					//attack의 경우 보내는 것과 받는 것이 같음
 					msg.msg_code=ATK_SERV;
-					for(i=0;i<pCnt;i++)
+					tcpMsgSend(player,pCnt,&msg,-1);
+
+					if(((inGameAtk *)&msg)->dmg==-1)
 					{
-						if(player[i]!=ep_events[i].data.fd)
-						{
-							write(player[i],(char *)&msg,sizeof(inGameAtk));
-						}
-						else
-						{
-							LogNum("attack",player[i]);
-						}
+						Log("death");
+						info[((inGameAtk *)&msg)->tid].death++;
+						LogNum("dead man's death",info[((inGameAtk *)&msg)->tid].death);
+						info[((inGameAtk *)&msg)->sid].kill++;
+						LogNum("killer's kill",info[((inGameAtk *)&msg)->sid].kill);
+
 					}
+					LogNum("attacker",((inGameAtk *)&msg)->sid);
 					LogNum("target",((inGameAtk *)&msg)->tid);
+					LogNum("damage",((inGameAtk *)&msg)->dmg);
 					break;
 				case ITEM_CLNT:
 					itemMsg.msg_code=ITEM_SERV;
 					itemMsg.icode = ((inGameItemRecv *)&msg)->icode;
+					tcpMsgSend(player,pCnt,(inGameMsg *)&itemMsg,-1);
+					break;
+				case RESPAWN_CLNT:
+					msg.msg_code=RESPAWN_SERV;
+					
+					tcpMsgSend(player,pCnt,&msg,-1);
 
-					for(i=0;i<pCnt;i++)
+					LogNum("respawn",ep_events[i].data.fd);
+					break;
+				case END_CLNT:
+					msg.msg_code = END_SERV;
+
+					int maxKill=-1;
+					int winner=-1;
+
+					for(int i=0;i<pCnt;i++)
 					{
-						if(player[i]!=ep_events[i].data.fd)
+						if(info[i].kill>maxKill)
 						{
-							write(player[i],(char *)&itemMsg,sizeof(inGameItemSend));
+							winner=i;
+							maxKill=info[i].kill;
 						}
 					}
-					break;
+
+					Log("end game");
+
+					((inGameEnd *)&msg)->winner=winner;
+					info[winner].win=1;
+
+					tcpMsgSend(player,pCnt,&msg,-1);
+					resultWrite(info,pCnt);
+
+					return NULL;
 			}
-/*
-			for(j=0;j<pCnt;j++)
-			{
-				//test 전송 메시지 없는 상태
-				if(player[j]!=ep_events[i].data.fd)
-				{
-					write(player[j],(char *)&msg,sizeof(inGameMsg));
-				}
-			}
-*/
 		}
 	}
 
 	return NULL;
+}
+
+//send가 기존 fd값이 아니면 모두에게 보냄
+//통일성 있게 이 값은 0으로 사용
+void tcpMsgSend(int *fd,int pCnt,inGameMsg *msg,int send)
+{
+	int str_len;
+	LogNum("non send fd",send);
+	for(int i=0;i<pCnt;i++)
+	{
+		if(fd[i]!=send)
+		{
+			str_len=write(fd[i],(char *)msg,sizeof(inGameMsg));
+			LogNum("send message",i);
+			LogNum("send fd",fd[i]);
+			LogNum("str_len",str_len);
+		}
+	}
 }
 
 int setUDP(int port)
@@ -264,23 +328,17 @@ int connectCheckUDP(int sock,int *player,struct sockaddr_in *clnt_adr,int cnt)
 	{
 		checkMsg.id=-1;
 		str_len=write(player[i],(char *)&checkMsg,sizeof(inGameUDPCheck));
-		LogNum("msg_code",checkMsg.msg_code);
+	//	LogNum("msg_code",checkMsg.msg_code);
 		LogNum("id",checkMsg.id);
 		LogNum("waiting",str_len);
 		clnt_adr_sz=sizeof(clnt_adr[i]);
 		recvfrom(sock,(char *)&msg,sizeof(udpMsg),0,
 				(struct sockaddr*)&(clnt_adr[i]),&clnt_adr_sz);
 		LogNum("get UDP msg",i);
-
-		//msg.id = i;
-		//msg.pos.x=(float)(rand()%51-25);
-		//msg.pos.z=(float)(rand()%51-25);
-		//msg.pos.y=1.0;
-
 		LogUDPMsg(msg);
 		checkMsg.id=i;
 		write(player[i],(char *)&checkMsg,sizeof(inGameUDPCheck));
-//		sendto(sock,(char*)&msg,sizeof(udpMsg),0,(struct sockaddr *)&(clnt_adr[i]),clnt_adr_sz);
+		sendto(sock,(char*)&msg,sizeof(udpMsg),0,(struct sockaddr *)&(clnt_adr[i]),clnt_adr_sz);
 	}
 
 	Log("Get all UDP");
@@ -297,7 +355,11 @@ int playGame(int sock,struct sockaddr_in *clnt_adr,int cnt)
 	struct sockaddr_in recv_adr;
 	socklen_t clnt_adr_sz =sizeof(recv_adr);
 
+	int str_len;
+
 	int i;
+
+	Log("udp thread start");
 	while(1)
 	{
 		clnt_adr_sz = sizeof(recv_adr);
@@ -305,17 +367,28 @@ int playGame(int sock,struct sockaddr_in *clnt_adr,int cnt)
 		recvfrom(sock,(char *)&msg,sizeof(udpMsg),0,
 (struct sockaddr *)&recv_adr,&clnt_adr_sz);
 
-		LogUDPMsg(msg);
+	//	LogUDPMsg(msg);
 
 		for(i=0;i<cnt;i++)
 		{
 	//		if(i!=msg.id)
 	//		{
-				sendto(sock,(char *)&msg,sizeof(udpMsg),0,
+				str_len=sendto(sock,(char *)&msg,sizeof(udpMsg),0,
 						(struct sockaddr*)&(clnt_adr[i]),clnt_adr_sz);
+		//		LogNum("i",i);
+		//		LogNum("str_len",str_len);
 	//		}
 		}
 	}
 
 	return TRUE;
+}
+
+void resultWrite(struct gameInfo *info,int pCnt)
+{
+	//DB와 연결 후 게임 결과를 기록
+
+	//현재는 아무 역할도 안함
+
+	return;
 }
