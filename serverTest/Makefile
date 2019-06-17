@@ -1,6 +1,6 @@
 ﻿#서버 exe생성
-server_exe : log.o server.o main.o database.o
-	gcc -o server_exe log.o server.o main.o database.o -I/usr/include/mysql -L/usr/lib/mysql -lmysqlclient
+server_exe : log.o inGame.o server.o main.o database.o
+	gcc -o server_exe log.o inGame.o server.o main.o database.o -I/usr/include/mysql -L/usr/lib/mysql -lmysqlclient -pthread
 
 main.o : main.c main.h
 	gcc -c -o main.o main.c
@@ -16,6 +16,9 @@ database.o : database.c database.h
 
 client : dummyClient.c
 	gcc -o client dummyClient.c
+
+inGame.o : inGame.c inGame.h
+	gcc -pthread -c -o inGame.o inGame.c
 
 #dummy client 생성
 dummy : dummyClient.c
