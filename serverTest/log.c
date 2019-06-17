@@ -21,5 +21,26 @@ void LogNum(char *buf, int num)
 	fprintf(stdout,"%s: %d\n",buf,num);
 }
 
+void LogUDPMsg(udpMsg msg)
+{
+	fprintf(stdout,"id : %d pos : (%f, %f, %f), cam : (%f, %f, %f)",msg.id,
+			msg.pos.x,msg.pos.y,msg.pos.z,
+			msg.cam.x,msg.cam.y,msg.cam.z);
+	if(msg.atk==TRUE)
+	{
+		fprintf(stdout,"atk : TRUE\n");
+	}
+	else
+	{
+		fprintf(stdout,"atk : FALSE\n");
+	}
+
+}
+
+void LogLoc(loc location)
+{
+	fprintf(stdout,"pos : (%f,%f,%f)\n",location.x,location.y,location.z);
+}
+
 
 //각 구조체에 대한 LOG형태도 추가되어야함
