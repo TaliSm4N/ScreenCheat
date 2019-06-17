@@ -3,6 +3,8 @@
 int SIGINTCount = 0; // sigint 발생시 처리하기 위해 만든 전역변수
 int sigPipeCount = 0; // sigpipe 발생시 처리하기 위해 만든 전역변수
 
+int udpPort = 9000;
+
 //SIGINT 처리
 void sigInt_handler (void)
 {
@@ -161,13 +163,13 @@ void closeClient(int epfd,int fd)
 
 //login module msg처리
 int login(int epfd ,int fd)
-{	
+{
 	if (sigPipeCount == 1) { //SIGPIPE 발생시
 		Log("SIGPIPE occured");
 		sigPipeCount = 0;
 		closeClient(epfd, fd);
 	}
-	
+
 	int str_len;
 	struct loginMsg loginMsg;
 	struct loginRequest *request;
@@ -176,8 +178,12 @@ int login(int epfd ,int fd)
 	Log("Login module");
 	LogNum("fd",fd);
 
-	str_len=read(fd,&loginMsg,sizeof(struct loginMsg)); // 로그인 단계 메시지를 받음
-
+	while(1)
+	{
+		str_len=read(fd,&loginMsg,sizeof(struct loginMsg)); // 로그인 단계 메시지를 받음
+		if(str_len != -1)
+			break;
+	}
 	switch(loginMsg.msg_code)
 	{
 		case 100:// 로그인 요청
@@ -239,14 +245,14 @@ int login(int epfd ,int fd)
 }
 
 //lobby module msg처리
-int lobby(int epfd, int fd, int stats[])
+int lobby(int epfd, int fd, int *stats)
 {
 	if (sigPipeCount == 1) { //SIGPIPE 발생시
 		Log("SIGPIPE occured");
 		sigPipeCount = 0;
 		closeClient(epfd, fd);
 	}
-	
+
     int str_len;
 	int i, tempI, divrcnt, modrcnt;
 	int roomCount = inquiryCount("RoomList"); // 전체 방 수
@@ -254,23 +260,34 @@ int lobby(int epfd, int fd, int stats[])
 	int broadcastfd[4] = {0}; // broadcast용 fd
 	int enterRid, enterUid; // 입장할 때 임시로 저장해 놓기위한 변수
 	int hostfd; // 방장의 fd
-	
+
+	struct buffer { // write 한 방에 다 보내기위해 만든 구조체
+		int msg_code;
+		struct room room[roomCount + 1];
+	};
+	struct buffer buffer;
+
 	struct lobbyMsg lobbyMsg;
 	struct lobbyRequest *request;
-	struct lobbyStatsFromHost *StatsFromHost;
+	struct lobbyStatsFromHost StatsFromHost;
 	struct lobbyAuth lobbyAuth;
 	struct lobbyCreateAuth lobbyCreateAuth;
 	struct lobbyEnterAuth lobbyEnterAuth;
 	struct lobbyListAuth lobbyListAuth;
 	struct lobbyListAuth_2 Listbuffer[divrcnt+1]; //방 목록을 담기위한 임시 버퍼, 나중에 struct room으로 교체하거나 내비둠
-	struct room room[roomCount]; // 두방에 보내기 위해서 만듬
+
 	struct user updateUser;
 	struct enterRoomBroadcast enterRoomBroadcast;    LogNum("roomCount",roomCount);
 
 	Log("Lobby module");
 	LogNum("fd",fd);
-	
-	str_len=read(fd,&lobbyMsg,sizeof(struct lobbyMsg)); // 로그인 단계 메시지를 받음
+
+	while(1)
+	{
+		str_len=read(fd,&lobbyMsg,sizeof(struct lobbyMsg)); // 로그인 단계 메시지를 받음
+		if(str_len != -1)
+			break;
+	}
 
 	switch(lobbyMsg.msg_code)
 	{
@@ -280,7 +297,9 @@ int lobby(int epfd, int fd, int stats[])
 			request=(struct lobbyRequest *)&lobbyMsg;
 
 			lobbyCreateAuth.msg_code=210;
-			createRoom(request->uid, fd, &lobbyCreateAuth, roomCount);
+			createRoom(request->uid, fd, &lobbyCreateAuth);
+
+            LogNum("lobbyCreateAuth rid", lobbyCreateAuth.rid);
 			write(fd,&lobbyCreateAuth,sizeof(struct lobbyCreateAuth));
 
 			stats[0] = 0; // 방 생성후 상태 변경
@@ -293,17 +312,22 @@ int lobby(int epfd, int fd, int stats[])
 			request=(struct lobbyRequest *)&lobbyMsg;
 
 			//호스트로부터 먼저 stats를 요청하는 과정
+			LogNum("msg201 rid ", request->rid);
 			hostfd = inquiryHostfd(request->rid); // 호스트의 fd를 가져옴
 
 			LogNum("hostfd", hostfd);
 
 			lobbyEnterAuth.msg_code = 215;
 			write(hostfd, &lobbyEnterAuth.msg_code, sizeof(int)); // 호스트에게 stats 달라고 요청
-			read(hostfd, &lobbyMsg,sizeof(struct lobbyMsg)); // 호스트로부터 메시지 받아옴
-			LogNum("Host message code", lobbyMsg.msg_code); // 어떤 메세지코드를 받는지 검사
-			if(lobbyMsg.msg_code == 204) { // 204 메시지 코드일때만 수행되어야 함
-			StatsFromHost = (struct lobbyStatsFromHost *)&lobbyMsg;
-			memcpy(stats, StatsFromHost->stats, sizeof(StatsFromHost->stats)); // stats 복사
+			while(1)
+			{
+				str_len = read(hostfd, &StatsFromHost ,sizeof(struct lobbyStatsFromHost)); // 호스트로부터 메시지 받아옴
+				if(str_len != -1)
+					break;
+			}
+			LogNum("Host message code", StatsFromHost.msg_code); // 어떤 메세지코드를 받는지 검사
+			if(StatsFromHost.msg_code == 204) { // 204 메시지 코드일때만 수행되어야 함
+			memcpy(stats, StatsFromHost.stats, sizeof(stats)); // stats 복사
 			printf("stats: %d %d %d %d \n", stats[0], stats[1], stats[2], stats[3]);
 			}
 			else { // 호스트의 메세지코드가 이상할 경우 임시로 방 접속 실패 처리로 해둠
@@ -311,14 +335,19 @@ int lobby(int epfd, int fd, int stats[])
 				lobbyEnterAuth.msg_code=214;
 				write(fd,&lobbyEnterAuth.msg_code,sizeof(int));
 				LogNum("fd", fd);
+				break;
 			}
 			// stats 과정 종료
-
+			LogNum("msg201 rid ", request->rid);
+            LogNum("msg201 uid", request->uid);
 			if (enterRoom(request->rid, request->uid, fd, stats, broadcastfd, &lobbyEnterAuth)) // rid가 존재하지 않을경우 실패
 			{
-				lobbyEnterAuth.msg_code=211;
+				lobbyEnterAuth.msg_code = 211;
 				write(fd,&lobbyEnterAuth,sizeof(struct lobbyEnterAuth)); // 다른 유저들의 정보, 자기 슬롯, 방의 유저 수 전달
-                LogNum("enterUser slot(lobbyEnterAuth)", lobbyEnterAuth.slot);
+				LogNum("enterUser slot(lobbyEnterAuth)", lobbyEnterAuth.slot);
+                printf("user0: %s \n", lobbyEnterAuth.user[0].id);
+				printf("user1: %s \n", lobbyEnterAuth.user[1].id);
+				printf("user2: %s \n", lobbyEnterAuth.user[2].id);
 				enterRoomBroadcast.msg_code=321;
 				bringUserinfo(request->uid, &updateUser); // profile 가져옴
 
@@ -355,33 +384,26 @@ int lobby(int epfd, int fd, int stats[])
 			Log("request RoomList");
 
 			lobbyListAuth.msg_code=212;
-			
+
 			bringRoomList(Listbuffer, divrcnt, modrcnt);
-			
+
 			for(i = 0; i < divrcnt; i++)
             { // 방 목록 전송 과정 1
 				tempI = i*4;
-		
-                memcpy(&room[0+tempI], &Listbuffer[i].room[0], sizeof(struct room));
-                memcpy(&room[1+tempI], &Listbuffer[i].room[1], sizeof(struct room));
-                memcpy(&room[2+tempI], &Listbuffer[i].room[2], sizeof(struct room));
-                memcpy(&room[3+tempI], &Listbuffer[i].room[3], sizeof(struct room));
+
+                memcpy(&buffer.room[0+tempI], &Listbuffer[i].room[0], sizeof(struct room));
+                memcpy(&buffer.room[1+tempI], &Listbuffer[i].room[1], sizeof(struct room));
+                memcpy(&buffer.room[2+tempI], &Listbuffer[i].room[2], sizeof(struct room));
+                memcpy(&buffer.room[3+tempI], &Listbuffer[i].room[3], sizeof(struct room));
 			}
 
             for (i = 0; i < modrcnt; i++)
             { // 방 목록 전송 과정 2 0~3개 남은 방들을 담아 전송
-			memcpy(&room[(divrcnt*4)+i], &Listbuffer[divrcnt].room[i], sizeof(struct room));
+			memcpy(&buffer.room[(divrcnt*4)+i], &Listbuffer[divrcnt].room[i], sizeof(struct room));
 			}
-			
-			write(fd,&lobbyListAuth.msg_code,sizeof(int));
-			write(fd, room, sizeof(room));
-			break;
 
-		case 203: // 방 개수 요청, lobby 전환시 클라이언트가 자동으로 신청함
-			Log("request RoomCount");
-			lobbyAuth.msg_code = 213;
-			lobbyAuth.roomCount = roomCount;
-			write(fd, &lobbyAuth, sizeof(struct lobbyAuth));
+			memset(&buffer.room[roomCount], -1, sizeof(struct room));
+			write(fd, &buffer, sizeof(buffer));
 			break;
 
 		case 500: // 게임 종료 요청, eState를 4로 바꿔야함
@@ -395,7 +417,7 @@ int lobby(int epfd, int fd, int stats[])
 	return 1; // eState = 1 으로 대기실 다시 진행
 }
 
-int inRoom(int epfd, int fd, int stats[])
+int inRoom(int epfd, int fd, int *stats)
 {
 	if (sigPipeCount == 1) { //SIGPIPE 발생시
 		Log("SIGPIPE occured");
@@ -407,6 +429,9 @@ int inRoom(int epfd, int fd, int stats[])
     int i;
     int broadcastfd[4] = {0}; // broadcast용 fd
 
+    pthread_t t_id;
+
+    struct gameArg gameArg;
     struct inRoomMsg inRoomMsg;
 	struct inRoomRequest *request;
 	struct inRoomStartAuth inRoomStartAuth;
@@ -416,8 +441,12 @@ int inRoom(int epfd, int fd, int stats[])
     Log("inRoom module");
 	LogNum("fd",fd);
 
-    str_len=read(fd,&inRoomMsg,sizeof(struct inRoomMsg)); // 로그인 단계 메시지를 받음
-
+	while(1)
+	{
+		str_len=read(fd,&inRoomMsg,sizeof(struct inRoomMsg)); // 로그인 단계 메시지를 받음
+		if(str_len != -1)
+			break;
+	}
     request=(struct inRoomRequest *)&inRoomMsg;
 
 	switch(inRoomMsg.msg_code)
@@ -430,26 +459,28 @@ int inRoom(int epfd, int fd, int stats[])
             broadcastInRoom(fd, request->rid, broadcastfd, &inRoomStateBroadcast);
 			LogNum("User slot", inRoomStateBroadcast.slot);
             inRoomStateBroadcast.msg_code=320;
+			for(i = 0; i < 4; i++) {
+				if(broadcastfd[i] == fd) // 요청한 유저의 상태만 기록시킨다
+					{
+						if (stats[i] == 0) {
+							stats[i] = 1;
+							inRoomStateBroadcast.stats = 1;
+						}
+						else if (stats[i] == 1) {
+							stats[i] = 0;
+							inRoomStateBroadcast.stats = 0;
+						}
+					}
+			}
             for(i = 0; i < 4; i++) // 다른 유저들에게 변경된 상태를 전달
 				{
 					if(broadcastfd[i] == fd || broadcastfd[i] == 0) // 없는 유저나 자신은 그냥 넘어감
 					{
-					    if(broadcastfd[i] == fd) // 요청한 유저의 상태만 기록시킨다
-                        {
-							if (stats[i] == 0) {
-								stats[i] = 1;
-								inRoomStateBroadcast.stats = 1;
-							}
-							else if (stats[i] == 1) {
-								stats[i] = 0;
-								inRoomStateBroadcast.stats = 0;
-							}
-                        }
-                        continue;
+					  continue;
 					}
-					write(broadcastfd[i],&inRoomStateBroadcast,sizeof(struct inRoomStateBroadcast));
-					printf("broadcastfd[%d] = %d\n", i, broadcastfd[i]);
+					write(broadcastfd[i], &inRoomStateBroadcast, sizeof(struct inRoomStateBroadcast));
 				}
+			printf("bcfd = %d %d %d %d\n", broadcastfd[0], broadcastfd[1], broadcastfd[2], broadcastfd[3]);
 			LogNum("changedUser stats", inRoomStateBroadcast.stats);
             break;
 
@@ -458,13 +489,39 @@ int inRoom(int epfd, int fd, int stats[])
             inRoomStartAuth.msg_code=311;
             // fd를 받아오기 위함 , broadcastfd와 rid 말곤 필요없는 정보, temp는 그냥 형식상 넘김
             broadcastInRoom(fd, request->rid, broadcastfd, &temp);
-
+            inRoomStartAuth.portNum = udpPort;
             for(i = 0; i < 4; i++) // 모두에게 311번(게임이 시작) 코드 전달
 				{
 					write(broadcastfd[i],&inRoomStartAuth.msg_code,sizeof(int));
-					printf("broadcastfd[%d] = %d\n", i, broadcastfd[i]);
 				}
-            /*
+			printf("bcfd = %d %d %d %d\n", broadcastfd[0], broadcastfd[1], broadcastfd[2], broadcastfd[3]);
+
+			//epoll에서 뺴줌
+			for(i=0;i<4;i++)
+			{
+				epoll_ctl(epfd,EPOLL_CTL_DEL,broadcastfd[i],NULL);
+			}
+			//thread arg세팅
+			gameArg.UDP=udpPort;
+			udpPort++;
+			gameArg.pCnt=0;
+			for(i=0;i<4;i++)
+			{
+				if(broadcastfd[i]!=0)
+					gameArg.pCnt++;
+			}
+			gameArg.player=broadcastfd;
+
+			//게임 시작 thread 실행
+			if(pthread_create(&t_id,NULL,inGameStart,&gameArg)!=0)
+			{
+				error_handling("inGame start error");
+			}
+
+			//수정 끝인 부분
+
+
+			/*
             inRoomStartAuth 에 포트 넘버 넘기는 과정 필요
 
             여기서 broadcastfd[i] 들을 전부 epoll 해제 시키고 넘겨주는 과정이 필요하다
@@ -479,21 +536,22 @@ int inRoom(int epfd, int fd, int stats[])
             Log("request Exit Room");
             inRoomStateBroadcast.msg_code=312;
             write(fd,&inRoomStateBroadcast.msg_code,sizeof(int)); // 신청 대상에게 잘 받았다고 먼저 전송
-
+            LogNum("msg302 rid ", request->rid);
             broadcastInRoom(fd, request->rid, broadcastfd, &inRoomStateBroadcast);
             inRoomStateBroadcast.msg_code=320;
+			inRoomStateBroadcast.stats = -1;
             for(i = 0; i < 4; i++) // 다른 유저들에게 변경된 상태를 전달
 				{
 					if(broadcastfd[i] == fd || broadcastfd[i] == 0) // 없는 유저나 자신은 그냥 넘어감
 					{
 					    stats[i] = -1; // 없는 유저나 퇴장한 유저는 똑같이 -1 이므로 그냥 진행
-						inRoomStateBroadcast.stats = -1;
 					    continue;
 					}
-					write(broadcastfd[i],&inRoomStateBroadcast,sizeof(struct inRoomStateBroadcast));
-					printf("broadcastfd[%d] = %d\n", i, broadcastfd[i]);
+					write(broadcastfd[i], &inRoomStateBroadcast, sizeof(struct inRoomStateBroadcast));
 				}
+			printf("bcfd = %d %d %d %d\n", broadcastfd[0], broadcastfd[1], broadcastfd[2], broadcastfd[3]);
 			LogNum("ExitedUser slot", inRoomStateBroadcast.slot);
+			exitRoom(fd, request->rid, broadcastfd);
             return 1; // 대기실 모듈로 전환
             break;
 
@@ -501,16 +559,16 @@ int inRoom(int epfd, int fd, int stats[])
             Log("request Delete Room");
             inRoomStateBroadcast.msg_code=313;
 
+            LogNum("msg303 rid ", request->rid);
             broadcastInRoom(fd, request->rid, broadcastfd, &inRoomStateBroadcast);
-
+            printf("broadcastfd: %d %d %d %d\n",broadcastfd[0],broadcastfd[1],broadcastfd[2],broadcastfd[3]);
             for(i = 0; i < 4; i++) // 모든 유저들에게 변경된 상태를 전달
 				{
 					if(broadcastfd[i] == 0) // 없는 유저는 그냥 넘어감
 						continue;
 
 					stats[i] = -1; // 모두 나갔으므로 전부 -1로 초기화
-					write(broadcastfd[i],&inRoomStateBroadcast.msg_code,sizeof(int));
-					printf("broadcastfd[%d] = %d\n", i, broadcastfd[i]);
+					write(broadcastfd[i], &inRoomStateBroadcast.msg_code, sizeof(int));
 				}
 
 			deleteRoom(request->rid); // 방을 삭제한다
@@ -538,8 +596,8 @@ int inRoom(int epfd, int fd, int stats[])
 					    continue;
 					}
 					write(broadcastfd[i],&inRoomStateBroadcast,sizeof(struct inRoomStateBroadcast));
-					printf("broadcastfd[%d] = %d\n", i, broadcastfd[i]);
 				}
+			printf("bcfd = %d %d %d %d\n", broadcastfd[0], broadcastfd[1], broadcastfd[2], broadcastfd[3]);
 			return 4;
 
 			break;
