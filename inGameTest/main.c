@@ -9,5 +9,7 @@ int main(int argc,char *argv[])
 
 	testIngame(atoi(argv[1]),atoi(argv[2]),PLAYER_CNT);
 
+	Log("main End");
+
 	return 0;
 }

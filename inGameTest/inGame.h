@@ -42,6 +42,7 @@ struct tcpThreadArg
 //	int epfd;
 	int *player;
 	int pCnt;
+	int *play;
 };
 
 void testIngame(int TPCport, int UDPport, int pCnt);//테스트 코드
@@ -57,7 +58,7 @@ void tcpMsgSend(int *fd,int pCnt,inGameMsg *msg,int send);
 //udp관련
 int setUDP(int port);
 int connectCheckUDP(int sock,int *player,struct sockaddr_in *clnt_adr,int cnt);
-int playGame(int sock,struct sockaddr_in *clnt_adr,int cnt);
+int playGame(int sock,struct sockaddr_in *clnt_adr,int cnt,int *play);
 void resultWrite(struct gameInfo *,int);
 
 #endif

@@ -6,7 +6,9 @@ void testIngame(int TCPport, int UDPport,int pCnt)
 {
 	int udp_sock;
 	int epfd;
-	int player[pCnt];//방장은 0번으로 함a
+	int player[pCnt];//방장은 0번으로 함
+
+	int play=TRUE;
 
 	struct tcpThreadArg arg;
 
@@ -28,6 +30,7 @@ void testIngame(int TCPport, int UDPport,int pCnt)
 
 	arg.player=player;
 	arg.pCnt=pCnt;
+	arg.play = &play;
 
 	if(pthread_create(&t_id,NULL,tcp_thread,&arg)!=0)
 	{
@@ -35,8 +38,17 @@ void testIngame(int TCPport, int UDPport,int pCnt)
 	}
 
 	connectCheckUDP(udp_sock,player,clnt_adr,pCnt);
-	playGame(udp_sock,clnt_adr,pCnt);
+	playGame(udp_sock,clnt_adr,pCnt,&play);
+	
 
+	//test함수에서는 tcp를 모두 종료
+//	for(int i=0;i<pCnt;i++)
+//	{
+//		close(player[i]);
+//	}
+	close(epfd);
+	Log("testMode End");
+	while(1);
 }
 
 //실제 버전에서는 가지고 있는 tcp에 대해서 epoll로 만들지만
@@ -63,6 +75,7 @@ int testTCP(int *sock_ary,int cnt,int port)
 		adr_sz =sizeof(clnt_adr);
 		sock_ary[i]=accept(sock,(struct sockaddr*)&clnt_adr,&adr_sz);
 		LogNum("connect TCP",i);
+		LogNum("sock_ary[i]",sock_ary[i]);
 
 	}
 	return sock;
@@ -149,6 +162,7 @@ void *tcp_thread(void *arg)
 	int epfd;
 	int *player=((struct tcpThreadArg *)arg)->player;
 	int pCnt=((struct tcpThreadArg *)arg)->pCnt;
+	int *play = ((struct tcpThreadArg *)arg)->play;
 	struct gameInfo info[4];
 
 	inGameMsg msg;
@@ -238,13 +252,14 @@ void *tcp_thread(void *arg)
 					int maxKill=-1;
 					int winner=-1;
 
-					for(int i=0;i<pCnt;i++)
+					for(int j=0;j<pCnt;j++)
 					{
-						if(info[i].kill>maxKill)
+						if(info[j].kill>maxKill)
 						{
-							winner=i;
-							maxKill=info[i].kill;
+							winner=j;
+							maxKill=info[j].kill;
 						}
+						epoll_ctl(epfd,EPOLL_CTL_DEL,player[j],NULL);
 					}
 
 					Log("end game");
@@ -255,6 +270,9 @@ void *tcp_thread(void *arg)
 					tcpMsgSend(player,pCnt,&msg,-1);
 					resultWrite(info,pCnt);
 
+					close(epfd);
+
+					*play=FALSE;
 					return NULL;
 			}
 		}
@@ -323,18 +341,31 @@ int connectCheckUDP(int sock,int *player,struct sockaddr_in *clnt_adr,int cnt)
 	srand(time(NULL));
 
 	Log("wait UDP msg");
+	LogNum("cnt",cnt);
 
 	for(int i=0;i<cnt;i++)
 	{
 		checkMsg.id=-1;
 		str_len=write(player[i],(char *)&checkMsg,sizeof(inGameUDPCheck));
 	//	LogNum("msg_code",checkMsg.msg_code);
+		Log("--------------");
+		LogNum("player",player[i]);
 		LogNum("id",checkMsg.id);
 		LogNum("waiting",str_len);
 		clnt_adr_sz=sizeof(clnt_adr[i]);
-		recvfrom(sock,(char *)&msg,sizeof(udpMsg),0,
+		while(1)
+		{
+			str_len=recvfrom(sock,(char *)&msg,sizeof(udpMsg),0,
 				(struct sockaddr*)&(clnt_adr[i]),&clnt_adr_sz);
+			if(str_len!=-1)
+				break;
+			Log("get udp check failed");
+		}
+		LogNum("sin_family",clnt_adr[i].sin_family);
+		LogNum("port",clnt_adr[i].sin_port);
+		LogNum("addr",clnt_adr[i].sin_addr.s_addr);
 		LogNum("get UDP msg",i);
+		Log("--------------");
 		LogUDPMsg(msg);
 		checkMsg.id=i;
 		write(player[i],(char *)&checkMsg,sizeof(inGameUDPCheck));
@@ -347,7 +378,7 @@ int connectCheckUDP(int sock,int *player,struct sockaddr_in *clnt_adr,int cnt)
 }
 
 
-int playGame(int sock,struct sockaddr_in *clnt_adr,int cnt)
+int playGame(int sock,struct sockaddr_in *clnt_adr,int cnt,int *play)
 {
 
 	udpMsg msg;
@@ -359,9 +390,18 @@ int playGame(int sock,struct sockaddr_in *clnt_adr,int cnt)
 
 	int i;
 
+	int sendCnt=0;
+
 	Log("udp thread start");
+	LogNum("playerCnt",cnt);
 	while(1)
 	{
+		if(*play==FALSE)
+		{
+			Log("gameEnd");
+			close(sock);//udp socket 제거
+			break;
+		}
 		clnt_adr_sz = sizeof(recv_adr);
 
 		recvfrom(sock,(char *)&msg,sizeof(udpMsg),0,
@@ -369,16 +409,27 @@ int playGame(int sock,struct sockaddr_in *clnt_adr,int cnt)
 
 	//	LogUDPMsg(msg);
 
+		sendCnt=0;
 		for(i=0;i<cnt;i++)
 		{
-	//		if(i!=msg.id)
-	//		{
+			if(i!=msg.id)
+			{
 				str_len=sendto(sock,(char *)&msg,sizeof(udpMsg),0,
 						(struct sockaddr*)&(clnt_adr[i]),clnt_adr_sz);
+				sendCnt++;
 		//		LogNum("i",i);
 		//		LogNum("str_len",str_len);
-	//		}
+			}
+	//			Log("====================");
+	//			LogNum("sender",msg.id);
+	//			LogNum("reciever",i);
+	//			Log("====================");
 		}
+	//	Log("------------------");
+	//	LogNum("sendCnt",sendCnt);
+	//	LogNum("msg id",msg.id);
+	//	LogUDPMsg(msg);
+	//	Log("----------------");
 	}
 
 	return TRUE;

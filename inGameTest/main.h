@@ -8,6 +8,6 @@
 #include "udpMsg.h"
 #include "log.h"
 
-#define PLAYER_CNT 2
+#define PLAYER_CNT 4
 
 #endif
