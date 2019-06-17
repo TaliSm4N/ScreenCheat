@@ -86,6 +86,7 @@ int inquiryHostfd(int rid)
 	runQuery(query); // 오류 체크용으로 임시로 박아둠
 	fetchRow();
 
+	Log("inquiryHostfd success!");
     return atoi(sql_row[0]);
 }
 
@@ -127,7 +128,7 @@ int checkRoomid(void)
 	Log("Check Roomid");
 	memset(query, 0x00, sizeof(query));
 	runQuery("select rid from RoomList");
-	
+
 	for(i = 1; i <= rcnt; i++)
 	{
 		fetchRow();
@@ -137,7 +138,7 @@ int checkRoomid(void)
 		}
 
 	}
-	
+
 	return i; // 끝까지 마친값
 }
 
@@ -190,21 +191,44 @@ int compareID(char *id, char *pwd, struct profile *Upf, int * uid) // ID, PWD를 
 }
 
 // 방 생성시 list에 추가(방 번호, 호스트 이름,호스트 fd)
-void createRoom(int uid, int fd, struct lobbyCreateAuth *Rinfo, int rcnt)
+void createRoom(int uid, int fd, struct lobbyCreateAuth *Rinfo)
 {
 	int rid;
-   // rcnt++;  // rid = rcnt + 1
     rid = checkRoomid();
 	LogNum("rid", rid);
 	memset(query, 0x00, sizeof(query));
 	snprintf(query, 255, "insert into RoomList (rid, hname,hostfd) values('%d', '%s','%d')", rid, convertUid(uid), fd);
 	runQuery(query);
 
-    Rinfo->rid = rcnt;
+    Rinfo->rid = rid;
 	if (sql_result)
                 mysql_free_result(sql_result);
 
     Log("Create Room Success");
+}
+
+// 방 퇴장시 인원 update, 방장이 아닌 다른 인원에 대해서만 update가 진행된다
+void exitRoom(int fd, int rid, int *broadcastfd)
+{
+    int i, ucnt;
+
+    // 해당 rid에 ucnt 를 가져오는 과정
+    snprintf(query, 255, "Select ucount from RoomList where rid = %d", rid);
+	runQuery(query);
+	fetchRow();
+	ucnt = atoi(sql_row[1]) - 1; // 방에 있는 유저 수에서 1 뺌
+
+    memset(query, 0x00, sizeof(query));
+    for(i = 1; i < 4; i++)
+    {
+        if(broadcastfd[i] == fd) // 삭제 대상과 일치
+        {
+            LogNum("exitRoom fd", fd);
+            snprintf(query, 255, "update RoomList set ucount = %d, guest%d = 0, guest%dfd = 0 where rid = %d", ucnt, i+1, i+1, rid);
+            runQuery(query);
+        }
+    }
+    Log("exitRoom update Success");
 }
 
 // 방 목록을 가져온다.
@@ -257,7 +281,6 @@ int enterRoom(int rid, int uid, int fd, int *stats, int *broadcastfd, struct lob
 
 
 	//guest 들의 uid와 방장의 id 조회
-
     strncpy(roomHostId, sql_row[2], sizeof(roomHostId)); // 방장의 id를 가져옴
     for(i = 0; i < 3; i++) // guest 1,2,3 uid 가져옴
     {
@@ -290,10 +313,11 @@ int enterRoom(int rid, int uid, int fd, int *stats, int *broadcastfd, struct lob
             stats[i+1] = 0; // 유저를 삽입 하였으므로 유저 상태의 값을 변경
             snprintf(query, 255, "update RoomList set ucount = %d,guest%d = %d, guest%dfd = %d where rid = %d", ucnt+1, i+2, uid, i+2, fd, rid);
             runQuery(query);
+            i++;
             break;
         }
     }
-	for(i = 0; i <3; i++)
+	for(i; i <3; i++)
 	{
 		if(guest[i] == 0) // 다음 빈칸이므로 continue
 			continue;
