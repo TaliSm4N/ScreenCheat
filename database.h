@@ -16,7 +16,8 @@ int 	joinMembership(char *, char *); //유저 회원가입을 시킴, uid는 1씩 추가된다
 int		compareID(char *, char *,struct profile *,int *);// ID, PWD를 비교한다. TRUE면 일치, FALSE면 일치하는 정보가 없다(틀리는것도 해당)
 
 // 대기실
-void	createRoom(int, int, struct lobbyCreateAuth *, int); // 방 생성시 list에 추가(방 번호, 호스트 이름,호스트 fd)
+void	createRoom(int, int, struct lobbyCreateAuth *); // 방 생성시 list에 추가(방 번호, 호스트 이름,호스트 fd)
+void    exitRoom(int, int, int *); // 방 퇴장시 인원 update, 방장이 아닌 다른 인원에 대해서만 update가 진행된다
 void	bringRoomList(struct lobbyListAuth_2 *,int, int); // 방 목록을 가져온다, 방 수를 리턴
 int 	enterRoom(int, int, int, int*, int *, struct lobbyEnterAuth *); // 방 접속
 
