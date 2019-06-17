@@ -1,5 +1,5 @@
-#ifndef SERVER_H
-#define SERVER_H
+#ifndef INGAME_H
+#define INGAME_H
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -8,37 +8,65 @@
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <sys/epoll.h>
-#include <signal.h>
+#include <pthread.h>
 #include <fcntl.h>
+#include <errno.h>
+#include "udpMsg.h"
+#include "tcpMsg.h"
+#include "myBoolean.h"
 #include "log.h"
-#include "msg.h"
-#include "database.h"
+#include "info.h"
+
+#include <time.h>
 
 #define EPOLL_SIZE 50
+#define OBJ_CNT 15
 
-#define eFD ((eventData *)(ep_events[i].data.ptr))->fd
-#define eState ((eventData *)(ep_events[i].data.ptr))->state
+#define MAP_CLNT 400
+#define MAP_SERV 410
+#define USR_CLNT 401
+#define USR_SERV 411
+#define ATK_CLNT 402
+#define ATK_SERV 412
+#define ITEM_CLNT 403
+#define ITEM_SERV 413
+#define UDPCHECK  414
+#define END_CLNT 405
+#define END_SERV 416
 
-//epoll에 있는 데이터
-typedef struct eventData
+#define RESPAWN_CLNT 404
+#define RESPAWN_SERV 415
+
+struct tcpThreadArg
 {
-	int fd;
-	int state;//어떤 모듈에 있는지 0 Login 모듈 1대기실 모듈 2 방모듈 3 인게임
-	// 추가할 거 있으면 필요할 때 추가
-}eventData;
+//	int epfd;
+	int *player;
+	int pCnt;
+};
 
-void sigInt_handler(void); //SIGINT 처리
-void sigPipe_handler(void); //SIGPIPE 처리, 종료되는 시그널이 발생한 경우 클라이언트의 소켓을 회수하고, epoll을 해제한다
-void sigintIgnore(int); //SIGINT 발생시 Log를 남기고 무시함
-void sigPipeIgnore(int); //SIGPIPE 발생시 소켓과 epoll을 해제하도록 전역변수의 값을 변경함
-void setnonblockingmode(int); //비동기 소켓으로 바꿈
-int setListening(char *);
-int setEpoll(int);
-int connectClient(int, int);
-void closeClient(int, int);
-int login(int, int);
-int lobby(int, int, int *);
-int inRoom(int, int, int *);
-int server(char *port);
+struct gameArg
+{
+	int UDP;
+	int pCnt;
+	int *player;
+};
+
+void testIngame(int TPCport, int UDPport, int pCnt);//테스트 코드
+
+//tcp관련
+
+int testTCP(int *,int,int);
+
+void *inGameStart(void *arg);//추가 코드
+int inGameEpoll(int *,int);
+int initGame(int,int *,int);
+void *tcp_thread(void *);
+void tcpMsgSend(int *fd,int pCnt,inGameMsg *msg,int send);
+
+//udp관련
+int setUDP(int port);
+int connectCheckUDP(int sock,int *player,struct sockaddr_in *clnt_adr,int cnt);
+int playGame(int sock,struct sockaddr_in *clnt_adr,int cnt);
+void resultWrite(struct gameInfo *,int);
 
 #endif
